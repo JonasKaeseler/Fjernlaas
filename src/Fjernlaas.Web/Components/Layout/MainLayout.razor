@@ -1,5 +1,43 @@
 @inherits LayoutComponentBase
 
-<main>
-    @Body
-</main>
+<div class="shell">
+    <aside class="sidebar">
+        <div class="brand">
+            <div class="brand-mark">FL</div>
+            <div>
+                <div class="brand-name">Fjernlås</div>
+                <div class="brand-sub">Administration</div>
+            </div>
+        </div>
+
+        <nav class="nav">
+            <NavLink href="" Match="NavLinkMatch.All" class="nav-link">Oversigt</NavLink>
+        </nav>
+
+        <div class="sidebar-foot">
+            <AuthorizeView>
+                <Authorized>
+                    <div class="user">
+                        <div class="user-name">@(context.User.FindFirst(AppClaims.Navn)?.Value ?? context.User.Identity?.Name)</div>
+                        <div class="user-sub">@Rolletekst(context.User)</div>
+                    </div>
+                    <form method="post" action="/logout">
+                        <AntiforgeryToken />
+                        <button type="submit" class="btn btn-secondary btn-block">Log ud</button>
+                    </form>
+                </Authorized>
+            </AuthorizeView>
+        </div>
+    </aside>
+
+    <main class="content">
+        @Body
+    </main>
+</div>
+
+@code {
+    private static string Rolletekst(ClaimsPrincipal bruger) =>
+        bruger.IsInRole(Roller.PlatformAdmin) ? "Platformsadministrator"
+        : bruger.IsInRole(Roller.OrganisationAdmin) ? "Administrator"
+        : "Bruger";
+}

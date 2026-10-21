@@ -1,6 +1,15 @@
 @page "/Error"
+@attribute [AllowAnonymous]
+@layout Layout.LoginLayout
 
 <PageTitle>Fejl</PageTitle>
 
-<h1>Der opstod en fejl</h1>
-<p>Prøv igen om lidt.</p>
+<div class="auth-page">
+    <div class="auth-form-side">
+        <div class="auth-form">
+            <h1 class="auth-title">Der opstod en fejl</h1>
+            <p class="muted">Prøv igen om lidt.</p>
+            <p><a href="/">Til forsiden</a></p>
+        </div>
+    </div>
+</div>

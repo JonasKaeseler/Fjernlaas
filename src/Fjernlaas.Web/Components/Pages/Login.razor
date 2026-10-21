@@ -1,0 +1,95 @@
+@page "/login"
+@attribute [AllowAnonymous]
+@layout Layout.LoginLayout
+@inject LoginService LoginTjeneste
+@inject NavigationManager Navigation
+
+<PageTitle>Log ind – Fjernlås</PageTitle>
+
+<div class="auth-page">
+    <div class="auth-form-side">
+        <div class="auth-form">
+            <div class="brand">
+                <div class="brand-mark">FL</div>
+                <div>
+                    <div class="brand-name">Fjernlås</div>
+                    <div class="brand-sub">Administration</div>
+                </div>
+            </div>
+
+            <h1 class="auth-title">Log ind</h1>
+            <p class="muted">Til administration af organisationer, brugere og adgang.</p>
+
+            <div class="card">
+                <EditForm Model="Model" FormName="login" OnValidSubmit="LogIndAsync" method="post">
+                    @if (_fejl is not null)
+                    {
+                        <div class="alert" role="alert">@_fejl</div>
+                    }
+
+                    <div class="field">
+                        <label for="email">E-mail</label>
+                        <InputText id="email" @bind-Value="Model.Email" class="input" type="email" autocomplete="username" placeholder="navn@firma.dk" />
+                    </div>
+
+                    <div class="field">
+                        <label for="adgangskode">Adgangskode</label>
+                        <InputText id="adgangskode" @bind-Value="Model.Adgangskode" class="input" type="password" autocomplete="current-password" />
+                    </div>
+
+                    <label class="check">
+                        <InputCheckbox @bind-Value="Model.HuskMig" />
+                        <span>Husk mig på denne computer i 30 dage</span>
+                    </label>
+
+                    <button type="submit" class="btn btn-primary btn-block">Log ind</button>
+                </EditForm>
+            </div>
+
+            <p class="muted small">Har du ikke fået en bruger endnu, så kontakt Fjernlås.</p>
+        </div>
+    </div>
+
+    <div class="auth-side">
+        <div class="auth-side-inner">
+            <div class="eyebrow">SMS-STYRET ADGANG</div>
+            <h2>Lås døren op med en SMS</h2>
+            <p class="muted">Se hvem der har åbnet, og styr adgang til dine lokationer ét sted.</p>
+        </div>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromForm]
+    private LoginModel Model { get; set; } = new();
+
+    [SupplyParameterFromQuery(Name = "ReturnUrl")]
+    private string? Retur { get; set; }
+
+    private string? _fejl;
+
+    private async Task LogIndAsync()
+    {
+        var resultat = await LoginTjeneste.LogIndAsync(Model.Email, Model.Adgangskode, Model.HuskMig);
+
+        switch (resultat)
+        {
+            case LoginResultat.Ok:
+                Navigation.NavigateTo(ReturnUrl.Sikker(Retur), forceLoad: true);
+                break;
+            case LoginResultat.Laast:
+                _fejl = "For mange mislykkede forsøg. Prøv igen om lidt.";
+                break;
+            default:
+                _fejl = "Login mislykkedes. Tjek e-mail og adgangskode, eller kontakt Fjernlås.";
+                break;
+        }
+    }
+
+    private sealed class LoginModel
+    {
+        public string? Email { get; set; }
+        public string? Adgangskode { get; set; }
+        public bool HuskMig { get; set; }
+    }
+}
