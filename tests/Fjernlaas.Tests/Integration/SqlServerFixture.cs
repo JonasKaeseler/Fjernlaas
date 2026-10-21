@@ -22,6 +22,8 @@ public class SqlServerFixture : IAsyncLifetime
         await db.Database.MigrateAsync();
     }
 
+    public string ConnectionString => _container.GetConnectionString();
+
     public Task DisposeAsync() => _container.DisposeAsync().AsTask();
 
     public AppDbContext CreateContext()

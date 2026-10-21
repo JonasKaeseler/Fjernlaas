@@ -24,3 +24,14 @@ Appen svarer på `/health`. SQL Server kører på `localhost,14330`, og connecti
 
 - `src/Fjernlaas.Web`: Blazor Server, API og (senere) Identity og EF Core
 - `tests/Fjernlaas.Tests`: xUnit og integrationstests
+
+## Platformsadmin
+
+Platformsadmin oprettes ved opstart, hvis e-mail og adgangskode er sat. Lokalt med user-secrets:
+
+```
+dotnet user-secrets set "PlatformAdmin:Email" "din@mail.dk" --project src/Fjernlaas.Web
+dotnet user-secrets set "PlatformAdmin:Password" "VælgEnKode1!" --project src/Fjernlaas.Web
+```
+
+Uden de to værdier sker der ingenting. En eksisterende bruger og dens adgangskode ændres aldrig.
