@@ -1,0 +1,12 @@
+bin/
+obj/
+.vs/
+*.user
+.env
+appsettings.Local.json
+TestResults/
+
+# Forretningsdokumenter og designmateriale hører ikke hjemme i kodearkivet
+*.docx
+~$*
+Design/
