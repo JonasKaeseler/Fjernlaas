@@ -16,6 +16,8 @@ dotnet test
 dotnet run --project src/Fjernlaas.Web
 ```
 
+Integrationstestene starter selv en SQL Server i Docker (Testcontainers), så Docker skal køre, når du kører `dotnet test`.
+
 Appen svarer på `/health`. SQL Server kører på `localhost,14330`, og connection string til lokal udvikling ligger i `appsettings.Development.json`.
 
 ## Struktur
