@@ -196,3 +196,21 @@ a { color: var(--link); }
 .badge { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
 .badge-ok { background: var(--primary-soft); color: var(--link); }
 .badge-off { background: #eceae4; color: var(--muted); }
+
+/* Formularer og små elementer til brugerstyring */
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 18px; }
+.field-wide { grid-column: 1 / -1; }
+@media (max-width: 700px) { .form-grid { grid-template-columns: 1fr; } }
+.inline-row { display: flex; gap: 10px; }
+.inline-row .input { flex: 1; font-family: var(--mono); }
+.hint { margin-top: 6px; font-size: 12.5px; color: var(--muted); }
+select.input { appearance: auto; }
+.kode { font-family: var(--mono); font-size: 14px; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 6px; padding: 2px 8px; user-select: all; }
+.kode-linje { margin-top: 10px; }
+.badge-wait { background: #f8efd9; color: #8a5a00; }
+.link-button { background: none; border: 0; padding: 0; font: inherit; font-size: 13px; color: var(--link); text-decoration: underline; cursor: pointer; }
+.filter { flex-wrap: wrap; }
+.filter .field { margin-bottom: 0; }
+
+/* Blazor flytter fokus til sidens h1 ved navigation (tabindex="-1"). Ingen fokusramme om overskriften. */
+h1[tabindex="-1"]:focus { outline: none; }

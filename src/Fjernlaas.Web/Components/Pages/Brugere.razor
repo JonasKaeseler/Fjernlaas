@@ -1,0 +1,423 @@
+@page "/brugere"
+@rendermode InteractiveServer
+@attribute [Authorize(Policy = Politikker.Administration)]
+@using System.Globalization
+@inject IServiceScopeFactory ScopeFactory
+@inject AuthenticationStateProvider AuthState
+
+<PageTitle>Brugere – Fjernlås</PageTitle>
+
+<div class="page-head">
+    <div>
+        <h1 class="page-title">Brugere</h1>
+        <p class="muted">
+            @(_aktoer?.ErPlatformAdmin == true
+                ? "Opret brugere og styr adgangen for de enkelte organisationer."
+                : "Brugerne i din organisation.")
+        </p>
+    </div>
+    @if (_aktoer?.ErPlatformAdmin == true)
+    {
+        <button type="button" class="btn btn-primary btn-inline" @onclick="VisOpret">+ Tilføj bruger</button>
+    }
+</div>
+
+@if (_besked is not null)
+{
+    <div class="notice" role="status">
+        @_besked
+        @if (_kode is not null)
+        {
+            <div class="kode-linje">
+                Midlertidig adgangskode: <code class="kode">@_kode</code>
+                <div class="hint">Kopiér den nu og giv den videre. Den vises kun denne ene gang, og brugeren skal vælge en ny ved første login.</div>
+            </div>
+        }
+    </div>
+}
+
+@if (_viserOpret && _aktoer?.ErPlatformAdmin == true)
+{
+    <div class="card card-flat">
+        <div class="form-grid">
+            <div class="field">
+                <label for="nyorg">Organisation</label>
+                <select id="nyorg" class="input" @bind="_nyOrg">
+                    <option value="">Vælg organisation</option>
+                    @foreach (var org in _organisationer)
+                    {
+                        <option value="@org.Id">@org.Navn</option>
+                    }
+                </select>
+            </div>
+            <div class="field">
+                <label for="nyrolle">Rolle</label>
+                <select id="nyrolle" class="input" @bind="_nyRolle">
+                    <option value="@Roller.Bruger">Bruger</option>
+                    <option value="@Roller.OrganisationAdmin">Administrator</option>
+                </select>
+            </div>
+            <div class="field">
+                <label for="nytnavn">Navn</label>
+                <input id="nytnavn" class="input" maxlength="@BrugerService.MaxNavnLaengde" @bind="_nytNavn" @bind:event="oninput" />
+            </div>
+            <div class="field">
+                <label for="nyemail">E-mail</label>
+                <input id="nyemail" class="input" type="email" @bind="_nyEmail" @bind:event="oninput" />
+            </div>
+            <div class="field field-wide">
+                <label for="nykode">Midlertidig adgangskode</label>
+                <div class="inline-row">
+                    <input id="nykode" class="input" @bind="_nyKode" @bind:event="oninput" autocomplete="off" />
+                    <button type="button" class="btn btn-secondary btn-inline" @onclick="GenererKode">Generér</button>
+                </div>
+                <div class="hint">Brugeren skal skifte den ved første login.</div>
+            </div>
+        </div>
+
+        @if (_opretFejl.Count > 0)
+        {
+            <div class="alert" role="alert">
+                @foreach (var fejl in _opretFejl)
+                {
+                    <div>@fejl</div>
+                }
+            </div>
+        }
+
+        <div class="actions">
+            <button type="button" class="btn btn-primary btn-inline" @onclick="OpretAsync" disabled="@_arbejder">Opret bruger</button>
+            <button type="button" class="btn btn-secondary btn-inline" @onclick="AnnullerOpret">Annuller</button>
+        </div>
+    </div>
+}
+
+<div class="card card-flat filter">
+    <div class="field field-tight">
+        <label for="soeg">Søg</label>
+        <input id="soeg" class="input" placeholder="Navn eller e-mail" @bind="_soeg" @bind:event="oninput" />
+    </div>
+    @if (_aktoer?.ErPlatformAdmin == true)
+    {
+        <div class="field field-tight">
+            <label for="orgfilter">Organisation</label>
+            <select id="orgfilter" class="input" value="@_filterOrg" @onchange="FilterAendretAsync">
+                <option value="">Alle</option>
+                @foreach (var org in _organisationer)
+                {
+                    <option value="@org.Id">@org.Navn</option>
+                }
+            </select>
+        </div>
+    }
+    <div class="muted small">@(_brugere is null ? "" : $"Viser {Synlige().Count}")</div>
+</div>
+
+@if (_brugere is null)
+{
+    <p class="muted">Henter…</p>
+}
+else if (Synlige().Count == 0)
+{
+    <div class="card card-flat empty">
+        <strong>Ingen brugere at vise</strong>
+    </div>
+}
+else
+{
+    <div class="card card-flat table-card">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Navn</th>
+                    <th>E-mail</th>
+                    @if (_aktoer?.ErPlatformAdmin == true)
+                    {
+                        <th>Organisation</th>
+                    }
+                    <th>Rolle</th>
+                    <th>Status</th>
+                    <th>Sidst logget ind</th>
+                    @if (_aktoer?.ErPlatformAdmin == true)
+                    {
+                        <th class="actions-col"></th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var b in Synlige())
+                {
+                    <tr @key="b.Id">
+                        <td><strong>@b.Navn</strong></td>
+                        <td>@b.Email</td>
+                        @if (_aktoer?.ErPlatformAdmin == true)
+                        {
+                            <td>@(b.OrganisationNavn ?? "–")</td>
+                        }
+                        <td>@Rolletekst(b.Rolle)</td>
+                        <td>
+                            @if (!b.Aktiv)
+                            {
+                                <span class="badge badge-off">Deaktiveret</span>
+                            }
+                            else if (b.SkalSkifteAdgangskode)
+                            {
+                                <span class="badge badge-wait">Venter på første login</span>
+                            }
+                            else
+                            {
+                                <span class="badge badge-ok">Aktiv</span>
+                            }
+                        </td>
+                        <td>@Tidspunkt(b.SidstLoggetInd)</td>
+                        @if (_aktoer?.ErPlatformAdmin == true)
+                        {
+                            <td class="actions-col">
+                                @if (_nulstilId == b.Id)
+                                {
+                                    <span class="small muted">Ny kode: <code class="kode">@_nulstilKode</code></span>
+                                    <button type="button" class="btn btn-primary btn-small" disabled="@_arbejder" @onclick="BekraeftNulstilAsync">Nulstil</button>
+                                    <button type="button" class="btn btn-secondary btn-small" @onclick="AnnullerNulstil">Annuller</button>
+                                }
+                                else
+                                {
+                                    <button type="button" class="btn btn-secondary btn-small" @onclick="() => StartNulstil(b)">Nulstil kode</button>
+                                    <button type="button" class="btn btn-secondary btn-small" disabled="@(_arbejder || (b.Aktiv && b.Id == _aktoer?.BrugerId))"
+                                            @onclick="() => SkiftAktivAsync(b)">
+                                        @(b.Aktiv ? "Deaktivér" : "Aktivér")
+                                    </button>
+                                }
+                            </td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private Aktoer? _aktoer;
+    private IReadOnlyList<OrganisationOversigt> _organisationer = [];
+    private IReadOnlyList<BrugerOversigt>? _brugere;
+
+    private string _soeg = string.Empty;
+    private string _filterOrg = string.Empty;
+    private string? _besked;
+    private string? _kode;
+    private bool _arbejder;
+
+    private bool _viserOpret;
+    private string _nyOrg = string.Empty;
+    private string _nyRolle = Roller.Bruger;
+    private string _nytNavn = string.Empty;
+    private string _nyEmail = string.Empty;
+    private string _nyKode = string.Empty;
+    private IReadOnlyList<string> _opretFejl = [];
+
+    private Guid? _nulstilId;
+    private string _nulstilKode = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var tilstand = await AuthState.GetAuthenticationStateAsync();
+        _aktoer = Aktoer.Fra(tilstand.User);
+
+        if (_aktoer.ErPlatformAdmin)
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            _organisationer = await scope.ServiceProvider.GetRequiredService<OrganisationService>().OversigtAsync();
+        }
+
+        await HentAsync();
+    }
+
+    private async Task HentAsync()
+    {
+        if (_aktoer is null) return;
+
+        Guid? organisation = _aktoer.ErPlatformAdmin && Guid.TryParse(_filterOrg, out var valgt) ? valgt : null;
+
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        _brugere = await scope.ServiceProvider.GetRequiredService<BrugerService>().OversigtAsync(_aktoer, organisation);
+    }
+
+    private IReadOnlyList<BrugerOversigt> Synlige()
+    {
+        if (_brugere is null) return [];
+        if (string.IsNullOrWhiteSpace(_soeg)) return _brugere;
+
+        var s = _soeg.Trim();
+        return _brugere
+            .Where(b => b.Navn.Contains(s, StringComparison.CurrentCultureIgnoreCase)
+                        || b.Email.Contains(s, StringComparison.CurrentCultureIgnoreCase))
+            .ToList();
+    }
+
+    private async Task FilterAendretAsync(ChangeEventArgs e)
+    {
+        _filterOrg = e.Value?.ToString() ?? string.Empty;
+        await HentAsync();
+    }
+
+    private void VisOpret()
+    {
+        _viserOpret = true;
+        _opretFejl = [];
+        _besked = null;
+        _kode = null;
+        _nyOrg = Guid.TryParse(_filterOrg, out _) ? _filterOrg : string.Empty;
+        _nyRolle = Roller.Bruger;
+        _nytNavn = string.Empty;
+        _nyEmail = string.Empty;
+        _nyKode = Adgangskoder.Ny();
+    }
+
+    private void AnnullerOpret()
+    {
+        _viserOpret = false;
+        _opretFejl = [];
+    }
+
+    private void GenererKode() => _nyKode = Adgangskoder.Ny();
+
+    private async Task OpretAsync()
+    {
+        if (_arbejder || _aktoer is null) return;
+
+        if (!Guid.TryParse(_nyOrg, out var organisationId))
+        {
+            _opretFejl = ["Vælg en organisation."];
+            return;
+        }
+
+        _arbejder = true;
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var resultat = await scope.ServiceProvider.GetRequiredService<BrugerService>()
+                .OpretAsync(_aktoer, organisationId, _nytNavn, _nyEmail, _nyRolle, _nyKode);
+
+            if (!resultat.Ok)
+            {
+                _opretFejl = Fejltekster(resultat);
+                return;
+            }
+
+            _besked = $"Brugeren {resultat.Bruger!.Navn} ({resultat.Bruger.Email}) er oprettet.";
+            _kode = _nyKode;
+            _viserOpret = false;
+            _opretFejl = [];
+            await HentAsync();
+        }
+        finally
+        {
+            _arbejder = false;
+        }
+    }
+
+    private async Task SkiftAktivAsync(BrugerOversigt bruger)
+    {
+        if (_arbejder || _aktoer is null) return;
+        _arbejder = true;
+        try
+        {
+            var aktiv = !bruger.Aktiv;
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var resultat = await scope.ServiceProvider.GetRequiredService<BrugerService>()
+                .SaetAktivAsync(_aktoer, bruger.Id, aktiv);
+
+            _kode = null;
+            _besked = resultat.Ok
+                ? $"{bruger.Navn} er {(aktiv ? "aktiveret" : "deaktiveret")}."
+                : string.Join(" ", Fejltekster(resultat));
+            await HentAsync();
+        }
+        finally
+        {
+            _arbejder = false;
+        }
+    }
+
+    private void StartNulstil(BrugerOversigt bruger)
+    {
+        _nulstilId = bruger.Id;
+        _nulstilKode = Adgangskoder.Ny();
+        _besked = null;
+        _kode = null;
+    }
+
+    private void AnnullerNulstil() => _nulstilId = null;
+
+    private async Task BekraeftNulstilAsync()
+    {
+        if (_arbejder || _aktoer is null || _nulstilId is not { } id) return;
+        _arbejder = true;
+        try
+        {
+            var navn = _brugere?.FirstOrDefault(b => b.Id == id)?.Navn ?? "Brugeren";
+
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var resultat = await scope.ServiceProvider.GetRequiredService<BrugerService>()
+                .NulstilAdgangskodeAsync(_aktoer, id, _nulstilKode);
+
+            if (resultat.Ok)
+            {
+                _besked = $"Adgangskoden for {navn} er nulstillet.";
+                _kode = _nulstilKode;
+            }
+            else
+            {
+                _besked = string.Join(" ", Fejltekster(resultat));
+                _kode = null;
+            }
+
+            _nulstilId = null;
+            await HentAsync();
+        }
+        finally
+        {
+            _arbejder = false;
+        }
+    }
+
+    private static IReadOnlyList<string> Fejltekster(BrugerResultat resultat) => resultat.Fejl switch
+    {
+        BrugerFejl.IkkeTilladt => ["Du har ikke ret til at gøre det."],
+        BrugerFejl.OrganisationIkkeFundet => ["Organisationen findes ikke længere."],
+        BrugerFejl.NavnUgyldigt => [$"Navnet skal være mellem 1 og {BrugerService.MaxNavnLaengde} tegn."],
+        BrugerFejl.EmailUgyldig => ["E-mailadressen er ikke gyldig."],
+        BrugerFejl.EmailFindesAllerede => ["Der findes allerede en bruger med den e-mail."],
+        BrugerFejl.RolleUgyldig => ["Vælg en gyldig rolle."],
+        BrugerFejl.IkkeFundet => ["Brugeren findes ikke længere."],
+        BrugerFejl.KanIkkeAendreSig => ["Du kan ikke deaktivere dig selv."],
+        BrugerFejl.AdgangskodeAfvist => resultat.Detaljer.Count > 0 ? resultat.Detaljer : ["Adgangskoden opfylder ikke kravene."],
+        _ => ["Noget gik galt. Prøv igen."]
+    };
+
+    private static string Rolletekst(string rolle) => rolle switch
+    {
+        Roller.PlatformAdmin => "Platformsadministrator",
+        Roller.OrganisationAdmin => "Administrator",
+        Roller.Bruger => "Bruger",
+        _ => "–"
+    };
+
+    private static string Tidspunkt(DateTime? utc)
+    {
+        if (utc is null) return "Aldrig";
+
+        var lokal = utc.Value;
+        try
+        {
+            lokal = TimeZoneInfo.ConvertTimeFromUtc(
+                DateTime.SpecifyKind(utc.Value, DateTimeKind.Utc), TimeZoneInfo.FindSystemTimeZoneById("Europe/Copenhagen"));
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            // Uden tidszonedata vises UTC.
+        }
+
+        return lokal.ToString("d. MMM yyyy HH:mm", new CultureInfo("da-DK"));
+    }
+}

@@ -22,6 +22,9 @@ public class ApplicationUser : IdentityUser<Guid>
     /// <summary>Falsk, når brugeren er deaktiveret af en administrator.</summary>
     public bool Aktiv { get; set; } = true;
 
+    /// <summary>Sand, når brugeren har en midlertidig adgangskode og skal vælge en ny ved næste login.</summary>
+    public bool SkalSkifteAdgangskode { get; set; }
+
     /// <summary>UTC.</summary>
     public DateTime OprettetTid { get; set; } = DateTime.UtcNow;
 

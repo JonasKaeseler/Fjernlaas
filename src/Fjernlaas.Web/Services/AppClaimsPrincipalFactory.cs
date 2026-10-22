@@ -17,6 +17,11 @@ public class AppClaimsPrincipalFactory(
         var identitet = await base.GenerateClaimsAsync(bruger);
 
         identitet.AddClaim(new Claim(AppClaims.Navn, bruger.Navn));
+        if (bruger.SkalSkifteAdgangskode)
+        {
+            identitet.AddClaim(new Claim(AppClaims.SkalSkifteAdgangskode, "true"));
+        }
+
         if (bruger.OrganisationId is { } organisationId)
         {
             identitet.AddClaim(new Claim(AppClaims.OrganisationId, organisationId.ToString()));

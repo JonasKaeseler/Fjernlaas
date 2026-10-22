@@ -15,6 +15,9 @@
             <AuthorizeView Policy="@Politikker.PlatformAdmin">
                 <NavLink href="organisationer" class="nav-link">Organisationer</NavLink>
             </AuthorizeView>
+            <AuthorizeView Policy="@Politikker.Administration">
+                <NavLink href="brugere" class="nav-link">Brugere</NavLink>
+            </AuthorizeView>
         </nav>
 
         <div class="sidebar-foot">

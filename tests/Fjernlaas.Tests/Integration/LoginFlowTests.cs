@@ -243,4 +243,141 @@ public class LoginFlowTests(SqlServerFixture fixture)
         var adminHtml = await (await admin.GetAsync("/")).Content.ReadAsStringAsync();
         Assert.Contains("href=\"organisationer\"", adminHtml);
     }
+
+    private static readonly Aktoer Platform = new(Guid.CreateVersion7(), null, true, false);
+    private const string Midlertidig = "Midlertidig-1!x";
+
+    private static async Task<(Guid OrganisationId, string Email)> OpretViaServiceAsync(
+        AppFactory factory, Guid? organisationId, string rolle, bool klarTilBrug)
+    {
+        using var scope = factory.Services.CreateScope();
+        var orgId = organisationId ?? (await scope.ServiceProvider.GetRequiredService<OrganisationService>()
+            .OpretAsync($"Butik {Guid.NewGuid():N}")).Organisation!.Id;
+        var email = $"bruger-{Guid.NewGuid():N}@example.com";
+
+        var resultat = await scope.ServiceProvider.GetRequiredService<BrugerService>()
+            .OpretAsync(Platform, orgId, "Fie Testesen", email, rolle, Midlertidig);
+        Assert.True(resultat.Ok, resultat.Fejl.ToString());
+
+        if (klarTilBrug)
+        {
+            var brugere = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+            var bruger = (await brugere.FindByEmailAsync(email))!;
+            bruger.SkalSkifteAdgangskode = false;
+            await brugere.UpdateAsync(bruger);
+        }
+
+        return (orgId, email);
+    }
+
+    private static async Task<HttpResponseMessage> PostSkiftAsync(HttpClient klient, string nuvaerende, string ny, string gentag)
+    {
+        var side = await klient.GetAsync("/skift-adgangskode");
+        Assert.Equal(HttpStatusCode.OK, side.StatusCode);
+        var felter = LaesFormfelter(await side.Content.ReadAsStringAsync());
+
+        felter[felter.Keys.Single(k => k.EndsWith(".NuvaerendeAdgangskode"))] = nuvaerende;
+        felter[felter.Keys.Single(k => k.EndsWith(".NyAdgangskode"))] = ny;
+        felter[felter.Keys.Single(k => k.EndsWith(".GentagAdgangskode"))] = gentag;
+
+        return await klient.PostAsync("/skift-adgangskode", new FormUrlEncodedContent(felter));
+    }
+
+    [Fact]
+    public async Task Midlertidig_adgangskode_skal_skiftes_foer_brugeren_kommer_videre()
+    {
+        using var factory = new AppFactory(fixture.ConnectionString);
+        var (_, email) = await OpretViaServiceAsync(factory, null, Roller.Bruger, klarTilBrug: false);
+        var klient = NyKlient(factory);
+
+        await PostLoginAsync(klient, email, Midlertidig);
+
+        // Alt andet end skift-siden sender videre dertil.
+        var forside = await klient.GetAsync("/");
+        Assert.Equal(HttpStatusCode.Redirect, forside.StatusCode);
+        Assert.Contains("/skift-adgangskode", forside.Headers.Location!.ToString());
+
+        // For svag ny kode afvises med en forklaring, og brugeren er stadig spærret.
+        var svag = await PostSkiftAsync(klient, Midlertidig, "kort", "kort");
+        Assert.Equal(HttpStatusCode.OK, svag.StatusCode);
+        Assert.Contains("mindst 10 tegn", await svag.Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.Redirect, (await klient.GetAsync("/")).StatusCode);
+
+        // To forskellige nye koder afvises.
+        var forskellig = await PostSkiftAsync(klient, Midlertidig, "Egen-Kode-2026!", "Anden-Kode-2026!");
+        Assert.Contains("ikke ens", await forskellig.Content.ReadAsStringAsync());
+
+        // Rigtig skift giver adgang.
+        var skift = await PostSkiftAsync(klient, Midlertidig, "Egen-Kode-2026!", "Egen-Kode-2026!");
+        Assert.True(skift.StatusCode is HttpStatusCode.Redirect or HttpStatusCode.SeeOther);
+        Assert.Equal(HttpStatusCode.OK, (await klient.GetAsync("/")).StatusCode);
+
+        // Bagefter virker kun den nye kode.
+        var ny = NyKlient(factory);
+        var medGammel = await PostLoginAsync(ny, email, Midlertidig);
+        Assert.Equal(HttpStatusCode.OK, medGammel.StatusCode);
+        Assert.Contains("Login mislykkedes", await medGammel.Content.ReadAsStringAsync());
+
+        var medNy = await PostLoginAsync(ny, email, "Egen-Kode-2026!");
+        Assert.True(medNy.StatusCode is HttpStatusCode.Redirect or HttpStatusCode.SeeOther);
+        Assert.Equal(HttpStatusCode.OK, (await ny.GetAsync("/")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Organisationsadmin_ser_kun_egne_brugere_paa_brugersiden_og_ingen_knapper()
+    {
+        using var factory = new AppFactory(fixture.ConnectionString);
+        var (orgA, adminEmail) = await OpretViaServiceAsync(factory, null, Roller.OrganisationAdmin, klarTilBrug: true);
+        var (_, kollegaA) = await OpretViaServiceAsync(factory, orgA, Roller.Bruger, klarTilBrug: true);
+        var (_, fremmed) = await OpretViaServiceAsync(factory, null, Roller.Bruger, klarTilBrug: true);
+
+        var klient = NyKlient(factory);
+        await PostLoginAsync(klient, adminEmail, Midlertidig);
+
+        var svar = await klient.GetAsync("/brugere");
+
+        Assert.Equal(HttpStatusCode.OK, svar.StatusCode);
+        var html = await svar.Content.ReadAsStringAsync();
+        Assert.Contains(kollegaA, html);
+        Assert.DoesNotContain(fremmed, html);
+        Assert.DoesNotContain("Tilføj bruger", html);
+        Assert.DoesNotContain("Nulstil kode", html);
+
+        // Organisationsadmin har ikke adgang til organisationssiden.
+        Assert.NotEqual(HttpStatusCode.OK, (await klient.GetAsync("/organisationer")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Almindelig_bruger_har_ikke_adgang_til_brugersiden()
+    {
+        using var factory = new AppFactory(fixture.ConnectionString);
+        var (_, email) = await OpretViaServiceAsync(factory, null, Roller.Bruger, klarTilBrug: true);
+        var klient = NyKlient(factory);
+        await PostLoginAsync(klient, email, Midlertidig);
+
+        Assert.NotEqual(HttpStatusCode.OK, (await klient.GetAsync("/brugere")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Platformsadmin_ser_alle_brugere_og_har_knapperne()
+    {
+        using var factory = new AppFactory(fixture.ConnectionString);
+        var (_, emailA) = await OpretViaServiceAsync(factory, null, Roller.Bruger, klarTilBrug: true);
+        var (_, emailB) = await OpretViaServiceAsync(factory, null, Roller.Bruger, klarTilBrug: true);
+        var adminEmail = $"admin-{Guid.NewGuid():N}@example.com";
+        using (var scope = factory.Services.CreateScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<PlatformAdminSeeder>()
+                .SikrAsync(adminEmail, "Platformsadmin", Adgangskode);
+        }
+
+        var klient = NyKlient(factory);
+        await PostLoginAsync(klient, adminEmail, Adgangskode);
+
+        var html = await (await klient.GetAsync("/brugere")).Content.ReadAsStringAsync();
+
+        Assert.Contains(emailA, html);
+        Assert.Contains(emailB, html);
+        Assert.Contains("Tilføj bruger", html);
+    }
 }

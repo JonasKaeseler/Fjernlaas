@@ -23,11 +23,17 @@ builder.Services
     .AddIdentityCookies();
 
 builder.Services
-    .AddIdentityCore<ApplicationUser>(o => o.User.RequireUniqueEmail = true)
+    .AddIdentityCore<ApplicationUser>(o =>
+    {
+        o.User.RequireUniqueEmail = true;
+        o.Password.RequiredLength = 10;
+    })
+    .AddErrorDescriber<DanskIdentityErrorDescriber>()
     .AddRoles<IdentityRole<Guid>>()
     .AddEntityFrameworkStores<AppDbContext>()
     .AddClaimsPrincipalFactory<AppClaimsPrincipalFactory>()
-    .AddSignInManager<AppSignInManager>();
+    .AddSignInManager<AppSignInManager>()
+    .AddDefaultTokenProviders(); // bruges til nulstilling af adgangskode
 
 builder.Services.ConfigureApplicationCookie(o =>
 {
@@ -50,11 +56,13 @@ builder.Services.Configure<SecurityStampValidatorOptions>(o => o.ValidationInter
 // Alt kræver login, medmindre siden eller endpointet udtrykkeligt er åbent.
 builder.Services.AddAuthorizationBuilder()
     .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build())
-    .AddPolicy(Politikker.PlatformAdmin, p => p.RequireRole(Roller.PlatformAdmin));
+    .AddPolicy(Politikker.PlatformAdmin, p => p.RequireRole(Roller.PlatformAdmin))
+    .AddPolicy(Politikker.Administration, p => p.RequireRole(Roller.PlatformAdmin, Roller.OrganisationAdmin));
 
 builder.Services.AddCascadingAuthenticationState();
 
 builder.Services.AddScoped<OrganisationService>();
+builder.Services.AddScoped<BrugerService>();
 builder.Services.AddScoped<PlatformAdminSeeder>();
 builder.Services.AddScoped<LoginService>();
 
@@ -71,6 +79,21 @@ if (!app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseAuthentication();
+
+// En bruger med midlertidig adgangskode må kun skifte den (eller logge ud).
+app.Use(async (context, next) =>
+{
+    if (context.User.Identity?.IsAuthenticated == true
+        && context.User.HasClaim(AppClaims.SkalSkifteAdgangskode, "true")
+        && !SkiftAdgangskodeKrav.Tilladt(context.Request.Path))
+    {
+        context.Response.Redirect(SkiftAdgangskodeKrav.Side);
+        return;
+    }
+
+    await next();
+});
+
 app.UseAuthorization();
 app.UseAntiforgery();
 

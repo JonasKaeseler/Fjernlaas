@@ -85,6 +85,9 @@ namespace Fjernlaas.Web.Data.Migrations
                     b.Property<DateTime?>("SidstLoggetInd")
                         .HasColumnType("datetime2");
 
+                    b.Property<bool>("SkalSkifteAdgangskode")
+                        .HasColumnType("bit");
+
                     b.Property<bool>("TwoFactorEnabled")
                         .HasColumnType("bit");
 

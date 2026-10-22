@@ -1,0 +1,99 @@
+@page "/skift-adgangskode"
+@layout Layout.LoginLayout
+@inject LoginService LoginTjeneste
+@inject NavigationManager Navigation
+
+<PageTitle>Skift adgangskode – Fjernlås</PageTitle>
+
+<div class="auth-page">
+    <div class="auth-form-side">
+        <div class="auth-form">
+            <div class="brand">
+                <div class="brand-mark">FL</div>
+                <div>
+                    <div class="brand-name">Fjernlås</div>
+                    <div class="brand-sub">Administration</div>
+                </div>
+            </div>
+
+            <h1 class="auth-title">Vælg en ny adgangskode</h1>
+            <p class="muted">Du har fået en midlertidig adgangskode. Vælg en ny, som kun du kender, før du går videre.</p>
+
+            <div class="card">
+                <EditForm Model="Model" FormName="skift-adgangskode" OnValidSubmit="SkiftAsync" method="post">
+                    @if (_fejl.Count > 0)
+                    {
+                        <div class="alert" role="alert">
+                            @foreach (var fejl in _fejl)
+                            {
+                                <div>@fejl</div>
+                            }
+                        </div>
+                    }
+
+                    <div class="field">
+                        <label for="nuvaerende">Midlertidig adgangskode</label>
+                        <InputText id="nuvaerende" @bind-Value="Model.NuvaerendeAdgangskode" class="input" type="password" autocomplete="current-password" />
+                    </div>
+
+                    <div class="field">
+                        <label for="ny">Ny adgangskode</label>
+                        <InputText id="ny" @bind-Value="Model.NyAdgangskode" class="input" type="password" autocomplete="new-password" />
+                        <div class="hint">Mindst 10 tegn med store og små bogstaver, tal og specialtegn.</div>
+                    </div>
+
+                    <div class="field">
+                        <label for="gentag">Gentag ny adgangskode</label>
+                        <InputText id="gentag" @bind-Value="Model.GentagAdgangskode" class="input" type="password" autocomplete="new-password" />
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-block">Gem ny adgangskode</button>
+                </EditForm>
+            </div>
+
+            <form method="post" action="/logout">
+                <AntiforgeryToken />
+                <button type="submit" class="link-button">Log ud</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="auth-side">
+        <div class="auth-side-inner">
+            <div class="eyebrow">SIKKERHED</div>
+            <h2>Din adgangskode er din egen</h2>
+            <p class="muted">Den midlertidige kode er kun beregnet til første login og kan ikke bruges bagefter.</p>
+        </div>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm]
+    private SkiftModel Model { get; set; } = new();
+
+    private IReadOnlyList<string> _fejl = [];
+
+    private async Task SkiftAsync()
+    {
+        var resultat = await LoginTjeneste.SkiftAdgangskodeAsync(
+            HttpContext.User, Model.NuvaerendeAdgangskode, Model.NyAdgangskode, Model.GentagAdgangskode);
+
+        if (resultat.Ok)
+        {
+            Navigation.NavigateTo("/", forceLoad: true);
+            return;
+        }
+
+        _fejl = resultat.Fejl;
+    }
+
+    private sealed class SkiftModel
+    {
+        public string? NuvaerendeAdgangskode { get; set; }
+        public string? NyAdgangskode { get; set; }
+        public string? GentagAdgangskode { get; set; }
+    }
+}
