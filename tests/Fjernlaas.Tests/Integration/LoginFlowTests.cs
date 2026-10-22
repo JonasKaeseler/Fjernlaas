@@ -4,6 +4,7 @@ using Fjernlaas.Web.Data;
 using Fjernlaas.Web.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -17,8 +18,18 @@ public class LoginFlowTests(SqlServerFixture fixture)
 
     private sealed class AppFactory(string forbindelse) : WebApplicationFactory<Program>
     {
-        protected override void ConfigureWebHost(Microsoft.AspNetCore.Hosting.IWebHostBuilder builder) =>
+        protected override void ConfigureWebHost(Microsoft.AspNetCore.Hosting.IWebHostBuilder builder)
+        {
             builder.UseSetting("ConnectionStrings:Default", forbindelse);
+
+            // Ingen automatisk platformsadmin fra user-secrets: testene opretter selv deres brugere.
+            builder.ConfigureAppConfiguration((_, config) =>
+                config.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["PlatformAdmin:Email"] = "",
+                    ["PlatformAdmin:Password"] = ""
+                }));
+        }
     }
 
     private static async Task<(string Email, Guid OrganisationId)> OpretBrugerAsync(AppFactory factory)
@@ -167,5 +178,69 @@ public class LoginFlowTests(SqlServerFixture fixture)
 
         Assert.Equal(HttpStatusCode.Redirect, svar.StatusCode);
         Assert.Contains("/login", svar.Headers.Location!.ToString());
+    }
+
+    [Fact]
+    public async Task Organisationssiden_kraever_platformsadmin()
+    {
+        using var factory = new AppFactory(fixture.ConnectionString);
+        var (email, _) = await OpretBrugerAsync(factory);
+        var klient = NyKlient(factory);
+
+        // Ikke logget ind: sendt til login.
+        var ubesvaret = await klient.GetAsync("/organisationer");
+        Assert.Equal(HttpStatusCode.Redirect, ubesvaret.StatusCode);
+        Assert.Contains("/login", ubesvaret.Headers.Location!.ToString());
+
+        // Logget ind som almindelig bruger i en organisation: ingen adgang.
+        await PostLoginAsync(klient, email, Adgangskode);
+        var almindelig = await klient.GetAsync("/organisationer");
+        Assert.NotEqual(HttpStatusCode.OK, almindelig.StatusCode);
+    }
+
+    [Fact]
+    public async Task Platformsadmin_ser_organisationerne_paa_siden()
+    {
+        using var factory = new AppFactory(fixture.ConnectionString);
+        var navn = $"Synlig {Guid.NewGuid():N}";
+        var adminEmail = $"admin-{Guid.NewGuid():N}@example.com";
+        using (var scope = factory.Services.CreateScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<OrganisationService>().OpretAsync(navn);
+            await scope.ServiceProvider.GetRequiredService<PlatformAdminSeeder>()
+                .SikrAsync(adminEmail, "Platformsadmin", Adgangskode);
+        }
+        var klient = NyKlient(factory);
+        await PostLoginAsync(klient, adminEmail, Adgangskode);
+
+        var svar = await klient.GetAsync("/organisationer");
+
+        Assert.Equal(HttpStatusCode.OK, svar.StatusCode);
+        var html = await svar.Content.ReadAsStringAsync();
+        Assert.Contains(navn, html);
+        Assert.Contains("Tilføj organisation", html);
+    }
+
+    [Fact]
+    public async Task Menupunktet_organisationer_vises_kun_for_platformsadmin()
+    {
+        using var factory = new AppFactory(fixture.ConnectionString);
+        var (almindeligEmail, _) = await OpretBrugerAsync(factory);
+        var adminEmail = $"admin-{Guid.NewGuid():N}@example.com";
+        using (var scope = factory.Services.CreateScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<PlatformAdminSeeder>()
+                .SikrAsync(adminEmail, "Platformsadmin", Adgangskode);
+        }
+
+        var almindelig = NyKlient(factory);
+        await PostLoginAsync(almindelig, almindeligEmail, Adgangskode);
+        var almindeligHtml = await (await almindelig.GetAsync("/")).Content.ReadAsStringAsync();
+        Assert.DoesNotContain("href=\"organisationer\"", almindeligHtml);
+
+        var admin = NyKlient(factory);
+        await PostLoginAsync(admin, adminEmail, Adgangskode);
+        var adminHtml = await (await admin.GetAsync("/")).Content.ReadAsStringAsync();
+        Assert.Contains("href=\"organisationer\"", adminHtml);
     }
 }

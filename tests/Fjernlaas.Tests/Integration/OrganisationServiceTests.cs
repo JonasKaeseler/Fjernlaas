@@ -145,4 +145,41 @@ public class OrganisationServiceTests(SqlServerFixture fixture)
 
         Assert.Equal(OrganisationFejl.IkkeFundet, resultat.Fejl);
     }
+
+    [Fact]
+    public async Task Oversigt_viser_antal_brugere_status_og_kan_soeges()
+    {
+        var u = Unik();
+        var medBrugere = (await NyService().OpretAsync($"Med brugere {u}")).Organisation!;
+        var tom = (await NyService().OpretAsync($"Tom {u}")).Organisation!;
+        await NyService().SaetStatusAsync(tom.Id, OrganisationStatus.Deaktiveret);
+
+        await using (var db = fixture.CreateContext())
+        {
+            foreach (var i in new[] { 1, 2 })
+            {
+                var email = $"b{i}-{u}@example.com";
+                db.Users.Add(new ApplicationUser
+                {
+                    UserName = email,
+                    NormalizedUserName = Normalisering.Normaliser(email),
+                    Email = email,
+                    NormalizedEmail = Normalisering.Normaliser(email),
+                    Navn = $"Bruger {i}",
+                    OrganisationId = medBrugere.Id
+                });
+            }
+            await db.SaveChangesAsync();
+        }
+
+        var oversigt = await NyService().OversigtAsync(u);
+
+        Assert.Equal(2, oversigt.Count);
+        var a = oversigt.Single(o => o.Id == medBrugere.Id);
+        var b = oversigt.Single(o => o.Id == tom.Id);
+        Assert.Equal(2, a.AntalBrugere);
+        Assert.Equal(OrganisationStatus.Aktiv, a.Status);
+        Assert.Equal(0, b.AntalBrugere);
+        Assert.Equal(OrganisationStatus.Deaktiveret, b.Status);
+    }
 }

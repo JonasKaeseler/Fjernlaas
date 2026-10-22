@@ -17,6 +17,9 @@ public sealed record OrganisationResultat(OrganisationFejl Fejl, Organisation? O
     public bool Ok => Fejl == OrganisationFejl.Ingen;
 }
 
+public sealed record OrganisationOversigt(
+    Guid Id, string Navn, OrganisationStatus Status, DateTime OprettetTid, int AntalBrugere);
+
 /// <summary>
 /// Administration af organisationer (kun for platformsadministratorer).
 /// Adgangskontrollen sidder i laget over servicen (UI/API), ikke her.
@@ -61,6 +64,23 @@ public class OrganisationService(AppDbContext db)
         }
 
         return await foresporgsel.OrderBy(o => o.Navn).ToListAsync(ct);
+    }
+
+    /// <summary>Til oversigten i admin-UI'et: som ListAsync, men med antal brugere pr. organisation.</summary>
+    public async Task<IReadOnlyList<OrganisationOversigt>> OversigtAsync(string? soeg = null, CancellationToken ct = default)
+    {
+        var foresporgsel = db.Organisationer.AsNoTracking();
+
+        if (!string.IsNullOrWhiteSpace(soeg))
+        {
+            var normaliseret = Normalisering.Normaliser(soeg);
+            foresporgsel = foresporgsel.Where(o => o.NavnNormaliseret.Contains(normaliseret));
+        }
+
+        return await foresporgsel
+            .OrderBy(o => o.Navn)
+            .Select(o => new OrganisationOversigt(o.Id, o.Navn, o.Status, o.OprettetTid, o.Brugere.Count))
+            .ToListAsync(ct);
     }
 
     public Task<Organisation?> HentAsync(Guid id, CancellationToken ct = default) =>

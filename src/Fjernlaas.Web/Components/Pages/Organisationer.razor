@@ -1,0 +1,303 @@
+@page "/organisationer"
+@rendermode InteractiveServer
+@attribute [Authorize(Policy = Politikker.PlatformAdmin)]
+@using System.Globalization
+@inject IServiceScopeFactory ScopeFactory
+
+<PageTitle>Organisationer – Fjernlås</PageTitle>
+
+<div class="page-head">
+    <div>
+        <h1 class="page-title">Organisationer</h1>
+        <p class="muted">Opret og vedligehold de organisationer, der bruger platformen.</p>
+    </div>
+    <button type="button" class="btn btn-primary btn-inline" @onclick="VisOpret">+ Tilføj organisation</button>
+</div>
+
+@if (_besked is not null)
+{
+    <div class="notice" role="status">@_besked</div>
+}
+
+@if (_viserOpret)
+{
+    <div class="card card-flat">
+        <div class="field">
+            <label for="nytnavn">Navn på ny organisation</label>
+            <input id="nytnavn" class="input" maxlength="@OrganisationService.MaxNavnLaengde" @bind="_nytNavn" @bind:event="oninput"
+                   @onkeydown="@(e => OpretVedEnter(e))" placeholder="fx Roshage Selvbetjening" />
+        </div>
+        @if (_opretFejl is not null)
+        {
+            <div class="alert" role="alert">@_opretFejl</div>
+        }
+        <div class="actions">
+            <button type="button" class="btn btn-primary btn-inline" @onclick="OpretAsync" disabled="@_arbejder">Opret</button>
+            <button type="button" class="btn btn-secondary btn-inline" @onclick="AnnullerOpret">Annuller</button>
+        </div>
+    </div>
+}
+
+<div class="card card-flat filter">
+    <div class="field field-tight">
+        <label for="soeg">Søg</label>
+        <input id="soeg" class="input" placeholder="Organisationens navn" value="@_soeg"
+               @oninput="SoegAendretAsync" />
+    </div>
+    <div class="muted small">@(_organisationer is null ? "" : $"Viser {_organisationer.Count}")</div>
+</div>
+
+@if (_organisationer is null)
+{
+    <p class="muted">Henter…</p>
+}
+else if (_organisationer.Count == 0)
+{
+    <div class="card card-flat empty">
+        @if (string.IsNullOrWhiteSpace(_soeg))
+        {
+            <strong>Ingen organisationer endnu</strong>
+            <p class="muted">Tryk på "Tilføj organisation" for at oprette den første.</p>
+        }
+        else
+        {
+            <strong>Ingen organisationer matcher søgningen</strong>
+        }
+    </div>
+}
+else
+{
+    <div class="card card-flat table-card">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Navn</th>
+                    <th>Status</th>
+                    <th class="num">Brugere</th>
+                    <th>Oprettet</th>
+                    <th class="actions-col"></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var org in _organisationer)
+                {
+                    <tr @key="org.Id">
+                        <td>
+                            @if (_redigerId == org.Id)
+                            {
+                                <input class="input input-small" aria-label="Nyt navn" maxlength="@OrganisationService.MaxNavnLaengde"
+                                       @bind="_redigerNavn" @bind:event="oninput" @onkeydown="@(e => GemVedEnter(e))" />
+                                @if (_redigerFejl is not null)
+                                {
+                                    <div class="field-error" role="alert">@_redigerFejl</div>
+                                }
+                            }
+                            else
+                            {
+                                <strong>@org.Navn</strong>
+                            }
+                        </td>
+                        <td>
+                            @if (org.Status == OrganisationStatus.Aktiv)
+                            {
+                                <span class="badge badge-ok">Aktiv</span>
+                            }
+                            else
+                            {
+                                <span class="badge badge-off">Deaktiveret</span>
+                            }
+                        </td>
+                        <td class="num">@org.AntalBrugere</td>
+                        <td>@Dato(org.OprettetTid)</td>
+                        <td class="actions-col">
+                            @if (_redigerId == org.Id)
+                            {
+                                <button type="button" class="btn btn-primary btn-small" @onclick="GemAsync" disabled="@_arbejder">Gem</button>
+                                <button type="button" class="btn btn-secondary btn-small" @onclick="AnnullerRediger">Annuller</button>
+                            }
+                            else
+                            {
+                                <button type="button" class="btn btn-secondary btn-small" @onclick="() => StartRediger(org)">Redigér</button>
+                                <button type="button" class="btn btn-secondary btn-small" disabled="@_arbejder"
+                                        @onclick="() => SkiftStatusAsync(org)">
+                                    @(org.Status == OrganisationStatus.Aktiv ? "Deaktivér" : "Aktivér")
+                                </button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private IReadOnlyList<OrganisationOversigt>? _organisationer;
+    private string _soeg = string.Empty;
+    private string? _besked;
+    private bool _arbejder;
+
+    private bool _viserOpret;
+    private string _nytNavn = string.Empty;
+    private string? _opretFejl;
+
+    private Guid? _redigerId;
+    private string _redigerNavn = string.Empty;
+    private string? _redigerFejl;
+
+    protected override async Task OnInitializedAsync() => await HentAsync();
+
+    private async Task HentAsync()
+    {
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        _organisationer = await scope.ServiceProvider.GetRequiredService<OrganisationService>().OversigtAsync(_soeg);
+    }
+
+    private async Task SoegAendretAsync(ChangeEventArgs e)
+    {
+        _soeg = e.Value?.ToString() ?? string.Empty;
+        await HentAsync();
+    }
+
+    private void VisOpret()
+    {
+        _viserOpret = true;
+        _nytNavn = string.Empty;
+        _opretFejl = null;
+        _besked = null;
+    }
+
+    private void AnnullerOpret()
+    {
+        _viserOpret = false;
+        _opretFejl = null;
+    }
+
+    private async Task OpretVedEnter(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await OpretAsync();
+    }
+
+    private async Task OpretAsync()
+    {
+        if (_arbejder) return;
+        _arbejder = true;
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var resultat = await scope.ServiceProvider.GetRequiredService<OrganisationService>().OpretAsync(_nytNavn);
+
+            if (!resultat.Ok)
+            {
+                _opretFejl = Fejltekst(resultat.Fejl);
+                return;
+            }
+
+            _besked = $"Organisationen \"{resultat.Organisation!.Navn}\" er oprettet.";
+            _viserOpret = false;
+            _opretFejl = null;
+            await HentAsync();
+        }
+        finally
+        {
+            _arbejder = false;
+        }
+    }
+
+    private void StartRediger(OrganisationOversigt org)
+    {
+        _redigerId = org.Id;
+        _redigerNavn = org.Navn;
+        _redigerFejl = null;
+        _besked = null;
+    }
+
+    private void AnnullerRediger()
+    {
+        _redigerId = null;
+        _redigerFejl = null;
+    }
+
+    private async Task GemVedEnter(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await GemAsync();
+        else if (e.Key == "Escape") AnnullerRediger();
+    }
+
+    private async Task GemAsync()
+    {
+        if (_arbejder || _redigerId is not { } id) return;
+        _arbejder = true;
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var resultat = await scope.ServiceProvider.GetRequiredService<OrganisationService>().OmdoebAsync(id, _redigerNavn);
+
+            if (!resultat.Ok)
+            {
+                _redigerFejl = Fejltekst(resultat.Fejl);
+                if (resultat.Fejl == OrganisationFejl.IkkeFundet)
+                {
+                    _redigerId = null;
+                    await HentAsync();
+                }
+                return;
+            }
+
+            _besked = $"Navnet er ændret til \"{resultat.Organisation!.Navn}\".";
+            _redigerId = null;
+            _redigerFejl = null;
+            await HentAsync();
+        }
+        finally
+        {
+            _arbejder = false;
+        }
+    }
+
+    private async Task SkiftStatusAsync(OrganisationOversigt org)
+    {
+        if (_arbejder) return;
+        _arbejder = true;
+        try
+        {
+            var ny = org.Status == OrganisationStatus.Aktiv ? OrganisationStatus.Deaktiveret : OrganisationStatus.Aktiv;
+
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var resultat = await scope.ServiceProvider.GetRequiredService<OrganisationService>().SaetStatusAsync(org.Id, ny);
+
+            _besked = resultat.Ok
+                ? $"\"{org.Navn}\" er {(ny == OrganisationStatus.Aktiv ? "aktiveret" : "deaktiveret")}."
+                : Fejltekst(resultat.Fejl);
+            await HentAsync();
+        }
+        finally
+        {
+            _arbejder = false;
+        }
+    }
+
+    private static string Fejltekst(OrganisationFejl fejl) => fejl switch
+    {
+        OrganisationFejl.NavnUgyldigt => $"Navnet skal være mellem 1 og {OrganisationService.MaxNavnLaengde} tegn.",
+        OrganisationFejl.NavnFindesAllerede => "Der findes allerede en organisation med det navn.",
+        OrganisationFejl.IkkeFundet => "Organisationen findes ikke længere.",
+        _ => "Noget gik galt. Prøv igen."
+    };
+
+    private static string Dato(DateTime utc)
+    {
+        var lokal = utc;
+        try
+        {
+            lokal = TimeZoneInfo.ConvertTimeFromUtc(
+                DateTime.SpecifyKind(utc, DateTimeKind.Utc), TimeZoneInfo.FindSystemTimeZoneById("Europe/Copenhagen"));
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            // Uden tidszonedata vises UTC.
+        }
+
+        return lokal.ToString("d. MMM yyyy", new CultureInfo("da-DK"));
+    }
+}

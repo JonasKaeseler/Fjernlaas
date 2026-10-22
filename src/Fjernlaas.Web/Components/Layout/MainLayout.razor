@@ -12,6 +12,9 @@
 
         <nav class="nav">
             <NavLink href="" Match="NavLinkMatch.All" class="nav-link">Oversigt</NavLink>
+            <AuthorizeView Policy="@Politikker.PlatformAdmin">
+                <NavLink href="organisationer" class="nav-link">Organisationer</NavLink>
+            </AuthorizeView>
         </nav>
 
         <div class="sidebar-foot">
