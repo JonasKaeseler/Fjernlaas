@@ -8,6 +8,20 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
     : IdentityDbContext<ApplicationUser, IdentityRole<Guid>, Guid>(options)
 {
     public DbSet<Organisation> Organisationer => Set<Organisation>();
+    public DbSet<Lokation> Lokationer => Set<Lokation>();
+    public DbSet<Ressource> Ressourcer => Set<Ressource>();
+
+    // Tenant-afgrænsning for lokationer og ressourcer. Standard er ingen adgang: en kontekst, hvor
+    // ingen har sagt, hvem der spørger, ser ingen lokationer eller ressourcer. Services kalder
+    // SaetTenant med aktøren. Kun system-opgaver (fx SMS-webhooken) bruger IgnoreQueryFilters().
+    private bool _tenantAlle;
+    private Guid? _tenantOrganisationId;
+
+    public void SaetTenant(bool alleOrganisationer, Guid? organisationId)
+    {
+        _tenantAlle = alleOrganisationer;
+        _tenantOrganisationId = organisationId;
+    }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -21,6 +35,43 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
             e.Property(x => x.NavnNormaliseret).HasMaxLength(200).IsRequired();
             e.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
             e.HasIndex(x => x.NavnNormaliseret).IsUnique();
+        });
+
+        builder.Entity<Lokation>(e =>
+        {
+            e.ToTable("Lokation");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Navn).HasMaxLength(200).IsRequired();
+            e.Property(x => x.NavnNormaliseret).HasMaxLength(200).IsRequired();
+            e.Property(x => x.Adresse).HasMaxLength(300);
+            e.Property(x => x.Tidszone).HasMaxLength(64).IsRequired();
+            e.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+
+            e.HasOne<Organisation>().WithMany().HasForeignKey(x => x.OrganisationId).OnDelete(DeleteBehavior.Restrict);
+
+            e.HasIndex(x => new { x.OrganisationId, x.NavnNormaliseret }).IsUnique();
+
+            e.HasQueryFilter(x => _tenantAlle || x.OrganisationId == _tenantOrganisationId);
+        });
+
+        builder.Entity<Ressource>(e =>
+        {
+            e.ToTable("Ressource");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Navn).HasMaxLength(200).IsRequired();
+            e.Property(x => x.NavnNormaliseret).HasMaxLength(200).IsRequired();
+            e.Property(x => x.Type).HasConversion<string>().HasMaxLength(20).IsRequired();
+            e.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+
+            // Restrict overalt: to stier fra Organisation (direkte og via Lokation) ville ellers
+            // give flere kaskade-stier, som SQL Server afviser. Vi sletter alligevel ikke, vi deaktiverer.
+            e.HasOne(x => x.Lokation).WithMany(l => l.Ressourcer).HasForeignKey(x => x.LokationId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<Organisation>().WithMany().HasForeignKey(x => x.OrganisationId).OnDelete(DeleteBehavior.Restrict);
+
+            e.HasIndex(x => new { x.LokationId, x.NavnNormaliseret }).IsUnique();
+            e.HasIndex(x => x.OrganisationId);
+
+            e.HasQueryFilter(x => _tenantAlle || x.OrganisationId == _tenantOrganisationId);
         });
 
         builder.Entity<ApplicationUser>(e =>

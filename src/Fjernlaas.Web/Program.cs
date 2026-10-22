@@ -63,6 +63,8 @@ builder.Services.AddCascadingAuthenticationState();
 
 builder.Services.AddScoped<OrganisationService>();
 builder.Services.AddScoped<BrugerService>();
+builder.Services.AddScoped<LokationService>();
+builder.Services.AddScoped<RessourceService>();
 builder.Services.AddScoped<PlatformAdminSeeder>();
 builder.Services.AddScoped<LoginService>();
 

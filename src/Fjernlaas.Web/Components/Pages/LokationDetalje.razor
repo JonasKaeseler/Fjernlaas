@@ -1,0 +1,230 @@
+@page "/lokationer/{Id:guid}"
+@rendermode InteractiveServer
+@attribute [Authorize(Policy = Politikker.Administration)]
+@inject IServiceScopeFactory ScopeFactory
+@inject AuthenticationStateProvider AuthState
+
+<PageTitle>@(_lokation?.Navn ?? "Lokation") – Fjernlås</PageTitle>
+
+<p class="small"><a href="lokationer">← Alle lokationer</a></p>
+
+@if (!_hentet)
+{
+    <p class="muted">Henter…</p>
+}
+else if (_lokation is null)
+{
+    <div class="card card-flat empty">
+        <strong>Lokationen findes ikke</strong>
+        <p class="muted">Den er måske slettet, eller du har ikke adgang til den.</p>
+    </div>
+}
+else
+{
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">@_lokation.Navn</h1>
+            <p class="muted">
+                @(_lokation.Adresse ?? "Ingen adresse")
+                · @_lokation.Tidszone
+                · <span class="badge @(_lokation.Status == LokationStatus.Aktiv ? "badge-ok" : "badge-off")">@(_lokation.Status == LokationStatus.Aktiv ? "Aktiv" : "Deaktiveret")</span>
+            </p>
+        </div>
+        <button type="button" class="btn btn-primary btn-inline" @onclick="VisOpret">+ Tilføj ressource</button>
+    </div>
+
+    @if (_lokation.Status != LokationStatus.Aktiv)
+    {
+        <div class="alert" role="status">Lokationen er deaktiveret. Dens ressourcer kan ikke åbnes, før lokationen er aktiveret igen.</div>
+    }
+
+    @if (_besked is not null)
+    {
+        <div class="notice" role="status">@_besked</div>
+    }
+
+    @if (_viserForm)
+    {
+        <div class="card card-flat">
+            <div class="field">
+                <label for="resnavn">@(_formId is null ? "Navn på ny ressource" : "Nyt navn")</label>
+                <input id="resnavn" class="input" maxlength="@RessourceService.MaxNavnLaengde" @bind="_formNavn" @bind:event="oninput"
+                       placeholder="fx Hoveddør" />
+            </div>
+            @if (_formFejl is not null)
+            {
+                <div class="alert" role="alert">@_formFejl</div>
+            }
+            <div class="actions">
+                <button type="button" class="btn btn-primary btn-inline" @onclick="GemAsync" disabled="@_arbejder">@(_formId is null ? "Opret" : "Gem")</button>
+                <button type="button" class="btn btn-secondary btn-inline" @onclick="AnnullerForm">Annuller</button>
+            </div>
+        </div>
+    }
+
+    @if (_ressourcer is null || _ressourcer.Count == 0)
+    {
+        <div class="card card-flat empty">
+            <strong>Ingen ressourcer endnu</strong>
+            <p class="muted">Tryk på "Tilføj ressource" for at oprette den første dør.</p>
+        </div>
+    }
+    else
+    {
+        <div class="card card-flat table-card">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Navn</th>
+                        <th>Type</th>
+                        <th>Status</th>
+                        <th class="actions-col"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in _ressourcer)
+                    {
+                        <tr @key="r.Id">
+                            <td><strong>@r.Navn</strong></td>
+                            <td>Dør</td>
+                            <td>
+                                <span class="badge @(r.Status == RessourceStatus.Aktiv ? "badge-ok" : "badge-wait")">
+                                    @(r.Status == RessourceStatus.Aktiv ? "Aktiv" : "På pause")
+                                </span>
+                            </td>
+                            <td class="actions-col">
+                                <button type="button" class="btn btn-secondary btn-small" @onclick="() => VisOmdoeb(r)">Omdøb</button>
+                                <button type="button" class="btn btn-secondary btn-small" disabled="@_arbejder" @onclick="() => SkiftStatusAsync(r)">
+                                    @(r.Status == RessourceStatus.Aktiv ? "Sæt på pause" : "Aktivér")
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private Aktoer? _aktoer;
+    private Lokation? _lokation;
+    private IReadOnlyList<RessourceOversigt>? _ressourcer;
+    private bool _hentet;
+
+    private string? _besked;
+    private bool _arbejder;
+
+    private bool _viserForm;
+    private Guid? _formId;
+    private string _formNavn = string.Empty;
+    private string? _formFejl;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var tilstand = await AuthState.GetAuthenticationStateAsync();
+        _aktoer = Aktoer.Fra(tilstand.User);
+        await HentAsync();
+    }
+
+    private async Task HentAsync()
+    {
+        if (_aktoer is null) return;
+
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        _lokation = await scope.ServiceProvider.GetRequiredService<LokationService>().HentAsync(_aktoer, Id);
+        _ressourcer = _lokation is null
+            ? null
+            : await scope.ServiceProvider.GetRequiredService<RessourceService>().OversigtAsync(_aktoer, Id);
+        _hentet = true;
+    }
+
+    private void VisOpret()
+    {
+        _viserForm = true;
+        _formId = null;
+        _formNavn = string.Empty;
+        _formFejl = null;
+        _besked = null;
+    }
+
+    private void VisOmdoeb(RessourceOversigt r)
+    {
+        _viserForm = true;
+        _formId = r.Id;
+        _formNavn = r.Navn;
+        _formFejl = null;
+        _besked = null;
+    }
+
+    private void AnnullerForm()
+    {
+        _viserForm = false;
+        _formFejl = null;
+    }
+
+    private async Task GemAsync()
+    {
+        if (_arbejder || _aktoer is null) return;
+        _arbejder = true;
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var service = scope.ServiceProvider.GetRequiredService<RessourceService>();
+
+            var resultat = _formId is { } id
+                ? await service.OmdoebAsync(_aktoer, id, _formNavn)
+                : await service.OpretAsync(_aktoer, Id, _formNavn);
+
+            if (!resultat.Ok)
+            {
+                _formFejl = Fejltekst(resultat.Fejl);
+                return;
+            }
+
+            _besked = _formId is null
+                ? $"Ressourcen {resultat.Ressource!.Navn} er oprettet."
+                : $"Ressourcen hedder nu {resultat.Ressource!.Navn}.";
+            _viserForm = false;
+            _formFejl = null;
+            await HentAsync();
+        }
+        finally
+        {
+            _arbejder = false;
+        }
+    }
+
+    private async Task SkiftStatusAsync(RessourceOversigt r)
+    {
+        if (_arbejder || _aktoer is null) return;
+        _arbejder = true;
+        try
+        {
+            var ny = r.Status == RessourceStatus.Aktiv ? RessourceStatus.Pause : RessourceStatus.Aktiv;
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var resultat = await scope.ServiceProvider.GetRequiredService<RessourceService>().SaetStatusAsync(_aktoer, r.Id, ny);
+
+            _besked = resultat.Ok
+                ? (ny == RessourceStatus.Pause ? $"{r.Navn} er sat på pause og kan ikke åbnes." : $"{r.Navn} er aktiv igen.")
+                : Fejltekst(resultat.Fejl);
+            await HentAsync();
+        }
+        finally
+        {
+            _arbejder = false;
+        }
+    }
+
+    private static string Fejltekst(RessourceFejl fejl) => fejl switch
+    {
+        RessourceFejl.IkkeTilladt => "Du har ikke ret til at gøre det.",
+        RessourceFejl.NavnUgyldigt => $"Navnet skal være mellem 1 og {RessourceService.MaxNavnLaengde} tegn.",
+        RessourceFejl.NavnFindesAllerede => "Der findes allerede en ressource med det navn på lokationen.",
+        RessourceFejl.LokationIkkeFundet => "Lokationen findes ikke længere.",
+        RessourceFejl.IkkeFundet => "Ressourcen findes ikke længere.",
+        _ => "Noget gik galt. Prøv igen."
+    };
+}

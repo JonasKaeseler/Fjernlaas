@@ -112,6 +112,50 @@ namespace Fjernlaas.Web.Data.Migrations
                     b.ToTable("Bruger", (string)null);
                 });
 
+            modelBuilder.Entity("Fjernlaas.Web.Data.Lokation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Adresse")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<string>("Navn")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("NavnNormaliseret")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime>("OprettetTid")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("OrganisationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("Tidszone")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganisationId", "NavnNormaliseret")
+                        .IsUnique();
+
+                    b.ToTable("Lokation", (string)null);
+                });
+
             modelBuilder.Entity("Fjernlaas.Web.Data.Organisation", b =>
                 {
                     b.Property<Guid>("Id")
@@ -142,6 +186,51 @@ namespace Fjernlaas.Web.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("Organisation", (string)null);
+                });
+
+            modelBuilder.Entity("Fjernlaas.Web.Data.Ressource", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("LokationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Navn")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("NavnNormaliseret")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime>("OprettetTid")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("OrganisationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganisationId");
+
+                    b.HasIndex("LokationId", "NavnNormaliseret")
+                        .IsUnique();
+
+                    b.ToTable("Ressource", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole<System.Guid>", b =>
@@ -285,6 +374,32 @@ namespace Fjernlaas.Web.Data.Migrations
                     b.Navigation("Organisation");
                 });
 
+            modelBuilder.Entity("Fjernlaas.Web.Data.Lokation", b =>
+                {
+                    b.HasOne("Fjernlaas.Web.Data.Organisation", null)
+                        .WithMany()
+                        .HasForeignKey("OrganisationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Fjernlaas.Web.Data.Ressource", b =>
+                {
+                    b.HasOne("Fjernlaas.Web.Data.Lokation", "Lokation")
+                        .WithMany("Ressourcer")
+                        .HasForeignKey("LokationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Fjernlaas.Web.Data.Organisation", null)
+                        .WithMany()
+                        .HasForeignKey("OrganisationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Lokation");
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>
                 {
                     b.HasOne("Microsoft.AspNetCore.Identity.IdentityRole<System.Guid>", null)
@@ -334,6 +449,11 @@ namespace Fjernlaas.Web.Data.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Fjernlaas.Web.Data.Lokation", b =>
+                {
+                    b.Navigation("Ressourcer");
                 });
 
             modelBuilder.Entity("Fjernlaas.Web.Data.Organisation", b =>
