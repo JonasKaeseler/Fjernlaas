@@ -52,3 +52,7 @@ Webhook til InMobile: `POST` (eller `GET`) til `/api/sms/{token}`. Teksten er `a
 Token vises kun, når SMS-nummeret oprettes eller udskiftes. Test lokalt med Postman: `POST http://localhost:5080/api/sms/{token}` med teksten som body.
 
 Kryptering bruger ASP.NET Core Data Protection. I drift skal nøglerne gemmes et sikkert sted (FND-6/FND-7), ellers kan gemte hemmeligheder ikke læses efter en ny udrulning.
+
+## Drift
+
+Opsætning af server, HTTPS, udrulning og sikkerhedskopi står i [docs/Drift.md](docs/Drift.md).

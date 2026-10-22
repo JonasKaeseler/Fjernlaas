@@ -137,6 +137,9 @@ else
                                 </span>
                             </td>
                             <td class="actions-col">
+                                <button type="button" class="btn btn-secondary btn-small" disabled="@(_arbejder || r.TTLockLockId is null)" @onclick="() => TestAsync(r)">
+                                    @(_testBekraeft == r.Id ? "Bekræft: døren åbnes" : "Test oplåsning")
+                                </button>
                                 <button type="button" class="btn btn-secondary btn-small" @onclick="() => VisKoblAsync(r)">Kobl lås</button>
                                 <button type="button" class="btn btn-secondary btn-small" @onclick="() => VisOmdoeb(r)">Omdøb</button>
                                 <button type="button" class="btn btn-secondary btn-small" disabled="@_arbejder" @onclick="() => SkiftStatusAsync(r)">
@@ -166,6 +169,42 @@ else
     private Guid? _formId;
     private string _formNavn = string.Empty;
     private string? _formFejl;
+
+    private Guid? _testBekraeft;
+
+    private async Task TestAsync(RessourceOversigt r)
+    {
+        if (_arbejder || _aktoer is null) return;
+
+        // Første tryk beder om bekræftelse, fordi testen åbner døren rigtigt.
+        if (_testBekraeft != r.Id)
+        {
+            _testBekraeft = r.Id;
+            _besked = $"Tryk igen for at åbne {r.Navn} nu.";
+            return;
+        }
+
+        _testBekraeft = null;
+        _arbejder = true;
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var res = await scope.ServiceProvider.GetRequiredService<OplaasningService>().TestAabnAsync(_aktoer, r.Id);
+            _besked = res switch
+            {
+                { IkkeTilladt: true } => "Du har ikke ret til at gøre det.",
+                { IkkeFundet: true } => "Ressourcen findes ikke længere.",
+                { Aabnet: true } => $"{r.Navn} er åbnet.",
+                { Udfald: Udfald.TTLockFejl } => $"TTLock afviste: {res.Fejltekst ?? "ukendt fejl"}{(res.ErrCode is { } k ? $" (kode {k})" : "")}",
+                { Udfald: { } u } => $"Ikke åbnet: {OplaasningsLogService.UdfaldTekst(u)}.",
+                _ => "Noget gik galt. Prøv igen."
+            };
+        }
+        finally
+        {
+            _arbejder = false;
+        }
+    }
 
     private IReadOnlyList<ForbindelseOversigt> _forbindelser = [];
     private IReadOnlyList<TTLockLaas>? _laase;

@@ -4,6 +4,7 @@ using Fjernlaas.Web.Services;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -65,7 +66,14 @@ builder.Services.AddScoped<OrganisationService>();
 builder.Services.AddScoped<BrugerService>();
 builder.Services.AddScoped<LokationService>();
 builder.Services.AddScoped<RessourceService>();
-builder.Services.AddDataProtection();
+// Nøglerne til Data Protection krypterer TTLock-adgangen i databasen. I drift skal de ligge på et permanent sted
+// (en mappe på en volumen), ellers kan appen ikke læse dem efter en ny udgivelse. Uden DataProtection:KeyPath bruges standardstedet.
+var dataProtection = builder.Services.AddDataProtection().SetApplicationName("Fjernlaas");
+var noegleMappe = builder.Configuration["DataProtection:KeyPath"];
+if (!string.IsNullOrWhiteSpace(noegleMappe))
+{
+    dataProtection.PersistKeysToFileSystem(new DirectoryInfo(noegleMappe));
+}
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.Configure<TTLockOptions>(builder.Configuration.GetSection("TTLock"));
 builder.Services.AddHttpClient<ITTLockKlient, TTLockKlient>(c => c.Timeout = TimeSpan.FromSeconds(10));
@@ -144,6 +152,13 @@ app.MapPost("/logout", async (HttpContext context, IAntiforgery antiforgery, Log
     await login.LogUdAsync();
     return Results.Redirect("/login");
 });
+
+// I drift køres migrationerne ved opstart, når Database:MigrerVedStart er true. Lokalt gør Jonas det selv med dotnet ef.
+if (app.Configuration.GetValue<bool>("Database:MigrerVedStart"))
+{
+    using var migrationsScope = app.Services.CreateScope();
+    await migrationsScope.ServiceProvider.GetRequiredService<AppDbContext>().Database.MigrateAsync();
+}
 
 // Platformsadmin oprettes ved opstart, hvis e-mail og adgangskode er sat i konfigurationen
 // (user-secrets lokalt, miljøvariabler i drift). Uden dem sker der ingenting.

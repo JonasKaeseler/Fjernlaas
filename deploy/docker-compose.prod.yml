@@ -1,0 +1,66 @@
+# Drift på en server med Docker: appen, SQL Server og Caddy (automatisk HTTPS).
+# Kopiér mappen deploy/ til serveren, læg en .env ved siden af (se .env.prod.example) og kør:
+#   docker compose -f docker-compose.prod.yml up -d
+services:
+  app:
+    image: ${APP_IMAGE:-ghcr.io/jonaskaeseler/fjernlaas:latest}
+    restart: unless-stopped
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    environment:
+      ConnectionStrings__Default: "Server=sqlserver;Database=Fjernlaas;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True;Encrypt=True"
+      Database__MigrerVedStart: "true"
+      # Appen står bag Caddy; dette gør, at https og klientens adresse læses fra proxyens headers.
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+      TTLock__ClientId: ${TTLOCK_CLIENT_ID}
+      TTLock__ClientSecret: ${TTLOCK_CLIENT_SECRET}
+      PlatformAdmin__Email: ${PLATFORMADMIN_EMAIL:-}
+      PlatformAdmin__Password: ${PLATFORMADMIN_PASSWORD:-}
+    volumes:
+      - dp-keys:/keys
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080 && printf \"GET /health HTTP/1.0\\r\\n\\r\\n\" >&3 && grep -q 200 <&3'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    restart: unless-stopped
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${SA_PASSWORD}
+      MSSQL_MEMORY_LIMIT_MB: "1536"
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "$$MSSQL_SA_PASSWORD" -Q "SELECT 1" || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  sqlserver-data:
+  dp-keys:
+  caddy-data:
+  caddy-config:

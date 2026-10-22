@@ -1,0 +1,5 @@
+# Caddy henter og fornyer HTTPS-certifikatet selv. DOMAIN sættes i .env (fx fjernlaas.example.dk).
+{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy app:8080
+}
