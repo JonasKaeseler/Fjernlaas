@@ -11,6 +11,8 @@ public enum RessourceFejl
     NavnUgyldigt,
     NavnFindesAllerede,
     LokationIkkeFundet,
+    ForbindelseIkkeFundet,
+    KoblingUgyldig,
     IkkeFundet
 }
 
@@ -21,7 +23,8 @@ public sealed record RessourceResultat(RessourceFejl Fejl, Ressource? Ressource)
 
 public sealed record RessourceOversigt(
     Guid Id, Guid LokationId, string LokationNavn, LokationStatus LokationStatus,
-    Guid OrganisationId, string Navn, RessourceType Type, RessourceStatus Status);
+    Guid OrganisationId, string Navn, RessourceType Type, RessourceStatus Status,
+    Guid? ForbindelseId, long? TTLockLockId);
 
 /// <summary>
 /// Ressourcer (døre). Samme regler som LokationService: aktøren afgrænser, hvad der kan ses og ændres.
@@ -43,7 +46,7 @@ public class RessourceService(AppDbContext db)
             from r in foresporgsel
             join l in db.Lokationer on r.LokationId equals l.Id
             orderby l.Navn, r.Navn
-            select new RessourceOversigt(r.Id, l.Id, l.Navn, l.Status, r.OrganisationId, r.Navn, r.Type, r.Status))
+            select new RessourceOversigt(r.Id, l.Id, l.Navn, l.Status, r.OrganisationId, r.Navn, r.Type, r.Status, r.ForbindelseId, r.TTLockLockId))
             .ToListAsync(ct);
     }
 
@@ -120,6 +123,34 @@ public class RessourceService(AppDbContext db)
         if (ressource is null) return Fejl(RessourceFejl.IkkeFundet);
 
         ressource.Status = status;
+        await db.SaveChangesAsync(ct);
+        return new RessourceResultat(RessourceFejl.Ingen, ressource);
+    }
+
+    /// <summary>
+    /// Kobler ressourcen til en lås hos TTLock, eller fjerner koblingen (begge tomme).
+    /// Forbindelsen skal høre til samme organisation som ressourcen.
+    /// </summary>
+    public async Task<RessourceResultat> KoblAsync(Aktoer aktoer, Guid id, Guid? forbindelseId, long? lockId, CancellationToken ct = default)
+    {
+        if (!Tenant.KanAdministrere(aktoer)) return Fejl(RessourceFejl.IkkeTilladt);
+        Tenant.Saet(db, aktoer);
+
+        // Enten begge eller ingen af dem.
+        if ((forbindelseId is null) != (lockId is null) || lockId is <= 0) return Fejl(RessourceFejl.KoblingUgyldig);
+
+        var ressource = await db.Ressourcer.FirstOrDefaultAsync(r => r.Id == id, ct);
+        if (ressource is null) return Fejl(RessourceFejl.IkkeFundet);
+
+        if (forbindelseId is { } f)
+        {
+            var forbindelse = await db.TTLockForbindelser.AsNoTracking().FirstOrDefaultAsync(x => x.Id == f, ct);
+            if (forbindelse is null || forbindelse.OrganisationId != ressource.OrganisationId)
+                return Fejl(RessourceFejl.ForbindelseIkkeFundet);
+        }
+
+        ressource.ForbindelseId = forbindelseId;
+        ressource.TTLockLockId = lockId;
         await db.SaveChangesAsync(ct);
         return new RessourceResultat(RessourceFejl.Ingen, ressource);
     }

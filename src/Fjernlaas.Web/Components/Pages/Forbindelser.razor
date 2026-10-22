@@ -1,0 +1,310 @@
+@page "/forbindelser"
+@rendermode InteractiveServer
+@attribute [Authorize(Policy = Politikker.Administration)]
+@inject IServiceScopeFactory ScopeFactory
+@inject AuthenticationStateProvider AuthState
+
+<PageTitle>TTLock-forbindelser – Fjernlås</PageTitle>
+
+<div class="page-head">
+    <div>
+        <h1 class="page-title">TTLock-forbindelser</h1>
+        <p class="muted">Organisationens TTLock-konto. Adgangskoden gemmes kun som krypteret hash.</p>
+    </div>
+    <button type="button" class="btn btn-primary btn-inline" @onclick="VisOpret">+ Tilføj forbindelse</button>
+</div>
+
+@if (_besked is not null)
+{
+    <div class="notice" role="status">@_besked</div>
+}
+
+@if (_viserForm)
+{
+    <div class="card card-flat">
+        <div class="form-grid">
+            @if (_aktoer?.ErPlatformAdmin == true)
+            {
+                <div class="field field-wide">
+                    <label for="fborg">Organisation</label>
+                    <select id="fborg" class="input" @bind="_formOrg">
+                        <option value="">Vælg organisation</option>
+                        @foreach (var org in _organisationer)
+                        {
+                            <option value="@org.Id">@org.Navn</option>
+                        }
+                    </select>
+                </div>
+            }
+            <div class="field">
+                <label for="fbnavn">Navn</label>
+                <input id="fbnavn" class="input" maxlength="@TTLockForbindelseService.MaxNavnLaengde" @bind="_formNavn" @bind:event="oninput" placeholder="fx Roshage TTLock" />
+            </div>
+            <div class="field">
+                <label for="fbbruger">TTLock-brugernavn</label>
+                <input id="fbbruger" class="input" autocomplete="off" maxlength="@TTLockForbindelseService.MaxBrugernavnLaengde" @bind="_formBrugernavn" @bind:event="oninput" />
+            </div>
+            <div class="field">
+                <label for="fbkode">TTLock-adgangskode</label>
+                <input id="fbkode" type="password" class="input" autocomplete="new-password" @bind="_formKode" @bind:event="oninput" />
+            </div>
+        </div>
+        @if (_formFejl is not null)
+        {
+            <div class="alert" role="alert">@_formFejl</div>
+        }
+        <div class="actions">
+            <button type="button" class="btn btn-primary btn-inline" @onclick="GemAsync" disabled="@_arbejder">Opret forbindelse</button>
+            <button type="button" class="btn btn-secondary btn-inline" @onclick="AnnullerForm">Annuller</button>
+        </div>
+    </div>
+}
+
+@if (_forbindelser is null)
+{
+    <p class="muted">Henter…</p>
+}
+else if (_forbindelser.Count == 0)
+{
+    <div class="card card-flat empty">
+        <strong>Ingen forbindelser endnu</strong>
+        <p class="muted">Tryk på "Tilføj forbindelse" og log ind med TTLock-kontoen.</p>
+    </div>
+}
+else
+{
+    <div class="card card-flat table-card">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Navn</th>
+                    @if (_aktoer?.ErPlatformAdmin == true)
+                    {
+                        <th>Organisation</th>
+                    }
+                    <th>Brugernavn</th>
+                    <th>Status</th>
+                    <th>Seneste fejl</th>
+                    <th class="actions-col"></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var f in _forbindelser)
+                {
+                    <tr @key="f.Id">
+                        <td><strong>@f.Navn</strong></td>
+                        @if (_aktoer?.ErPlatformAdmin == true)
+                        {
+                            <td>@f.OrganisationNavn</td>
+                        }
+                        <td>@f.Brugernavn</td>
+                        <td>
+                            <span class="badge @(f.Status == ForbindelseStatus.Aktiv ? "badge-ok" : "badge-off")">
+                                @(f.Status == ForbindelseStatus.Aktiv ? "Aktiv" : "Deaktiveret")
+                            </span>
+                        </td>
+                        <td>@(f.SidsteFejl ?? "–")</td>
+                        <td class="actions-col">
+                            <button type="button" class="btn btn-secondary btn-small" disabled="@_arbejder" @onclick="() => TestAsync(f)">Vis låse</button>
+                            <button type="button" class="btn btn-secondary btn-small" disabled="@_arbejder" @onclick="() => SkiftStatusAsync(f)">
+                                @(f.Status == ForbindelseStatus.Aktiv ? "Deaktivér" : "Aktivér")
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@if (_laase is not null)
+{
+    <h2 class="section-title">Låse på @_laaseForbindelse</h2>
+    <div class="card card-flat table-card">
+        @if (_laase.Count == 0)
+        {
+            <p class="muted">Ingen låse fundet på kontoen.</p>
+        }
+        else
+        {
+            <table class="table">
+                <thead><tr><th>Navn</th><th>Lås-id</th><th>Batteri</th><th>Gateway</th></tr></thead>
+                <tbody>
+                    @foreach (var l in _laase)
+                    {
+                        <tr>
+                            <td>@(string.IsNullOrWhiteSpace(l.Alias) ? l.Navn : l.Alias)</td>
+                            <td>@l.LockId</td>
+                            <td>@(l.Batteri is { } b ? $"{b} %" : "–")</td>
+                            <td>@(l.HarGateway ? "Ja" : "Nej")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+}
+
+@code {
+    private Aktoer? _aktoer;
+    private IReadOnlyList<OrganisationOversigt> _organisationer = [];
+    private IReadOnlyList<ForbindelseOversigt>? _forbindelser;
+    private IReadOnlyList<TTLockLaas>? _laase;
+    private string _laaseForbindelse = string.Empty;
+
+    private string? _besked;
+    private bool _arbejder;
+    private bool _viserForm;
+    private string _formOrg = string.Empty;
+    private string _formNavn = string.Empty;
+    private string _formBrugernavn = string.Empty;
+    private string _formKode = string.Empty;
+    private string? _formFejl;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var tilstand = await AuthState.GetAuthenticationStateAsync();
+        _aktoer = Aktoer.Fra(tilstand.User);
+
+        if (_aktoer.ErPlatformAdmin)
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            _organisationer = await scope.ServiceProvider.GetRequiredService<OrganisationService>().OversigtAsync();
+        }
+
+        await HentAsync();
+    }
+
+    private async Task HentAsync()
+    {
+        if (_aktoer is null) return;
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        _forbindelser = await scope.ServiceProvider.GetRequiredService<TTLockForbindelseService>().OversigtAsync(_aktoer);
+    }
+
+    private void VisOpret()
+    {
+        _viserForm = true;
+        _formOrg = string.Empty;
+        _formNavn = string.Empty;
+        _formBrugernavn = string.Empty;
+        _formKode = string.Empty;
+        _formFejl = null;
+        _besked = null;
+    }
+
+    private void AnnullerForm()
+    {
+        _viserForm = false;
+        _formKode = string.Empty;
+        _formFejl = null;
+    }
+
+    private async Task GemAsync()
+    {
+        if (_arbejder || _aktoer is null) return;
+
+        Guid organisationId;
+        if (_aktoer.ErPlatformAdmin)
+        {
+            if (!Guid.TryParse(_formOrg, out organisationId))
+            {
+                _formFejl = "Vælg en organisation.";
+                return;
+            }
+        }
+        else if (_aktoer.OrganisationId is { } egen)
+        {
+            organisationId = egen;
+        }
+        else
+        {
+            _formFejl = Fejltekst(ForbindelseFejl.IkkeTilladt, null);
+            return;
+        }
+
+        _arbejder = true;
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var resultat = await scope.ServiceProvider.GetRequiredService<TTLockForbindelseService>()
+                .OpretAsync(_aktoer, organisationId, _formNavn, _formBrugernavn, _formKode);
+
+            if (!resultat.Ok)
+            {
+                _formFejl = Fejltekst(resultat.Fejl, resultat.Detalje);
+                return;
+            }
+
+            _besked = $"Forbindelsen {resultat.Forbindelse!.Navn} er oprettet.";
+            _viserForm = false;
+            _formKode = string.Empty;
+            _formFejl = null;
+            await HentAsync();
+        }
+        finally
+        {
+            _arbejder = false;
+        }
+    }
+
+    private async Task TestAsync(ForbindelseOversigt f)
+    {
+        if (_arbejder || _aktoer is null) return;
+        _arbejder = true;
+        _laase = null;
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var resultat = await scope.ServiceProvider.GetRequiredService<TTLockForbindelseService>().LaaseAsync(_aktoer, f.Id);
+            if (resultat.Ok)
+            {
+                _laase = resultat.Laase;
+                _laaseForbindelse = f.Navn;
+                _besked = null;
+            }
+            else
+            {
+                _besked = Fejltekst(resultat.Fejl, resultat.Detalje);
+            }
+            await HentAsync();
+        }
+        finally
+        {
+            _arbejder = false;
+        }
+    }
+
+    private async Task SkiftStatusAsync(ForbindelseOversigt f)
+    {
+        if (_arbejder || _aktoer is null) return;
+        _arbejder = true;
+        try
+        {
+            var ny = f.Status == ForbindelseStatus.Aktiv ? ForbindelseStatus.Deaktiveret : ForbindelseStatus.Aktiv;
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var resultat = await scope.ServiceProvider.GetRequiredService<TTLockForbindelseService>().SaetStatusAsync(_aktoer, f.Id, ny);
+            _besked = resultat.Ok
+                ? $"{f.Navn} er {(ny == ForbindelseStatus.Aktiv ? "aktiveret" : "deaktiveret")}."
+                : Fejltekst(resultat.Fejl, resultat.Detalje);
+            await HentAsync();
+        }
+        finally
+        {
+            _arbejder = false;
+        }
+    }
+
+    private static string Fejltekst(ForbindelseFejl fejl, string? detalje) => fejl switch
+    {
+        ForbindelseFejl.IkkeTilladt => "Du har ikke ret til at gøre det.",
+        ForbindelseFejl.IkkeKonfigureret => "TTLock er ikke sat op på serveren (ClientId og ClientSecret mangler).",
+        ForbindelseFejl.NavnUgyldigt => $"Navnet skal være mellem 1 og {TTLockForbindelseService.MaxNavnLaengde} tegn.",
+        ForbindelseFejl.BrugernavnUgyldigt => "Skriv TTLock-brugernavnet.",
+        ForbindelseFejl.AdgangskodeMangler => "Skriv TTLock-adgangskoden.",
+        ForbindelseFejl.OrganisationIkkeFundet => "Organisationen findes ikke længere.",
+        ForbindelseFejl.IkkeFundet => "Forbindelsen findes ikke længere.",
+        ForbindelseFejl.TTLockAfviste => string.IsNullOrWhiteSpace(detalje) ? "TTLock afviste forespørgslen." : $"TTLock: {detalje}",
+        _ => "Noget gik galt. Prøv igen."
+    };
+}

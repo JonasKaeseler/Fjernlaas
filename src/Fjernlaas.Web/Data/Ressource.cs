@@ -42,6 +42,12 @@ public class Ressource
 
     public RessourceType Type { get; set; } = RessourceType.Doer;
 
+    /// <summary>Organisationens TTLock-forbindelse, som låsen hører under. Tom, så længe ressourcen ikke er koblet til en lås.</summary>
+    public Guid? ForbindelseId { get; set; }
+
+    /// <summary>Låsens id hos TTLock.</summary>
+    public long? TTLockLockId { get; set; }
+
     public RessourceStatus Status { get; set; } = RessourceStatus.Aktiv;
 
     /// <summary>UTC.</summary>

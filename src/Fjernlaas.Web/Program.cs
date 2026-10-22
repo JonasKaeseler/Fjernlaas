@@ -65,6 +65,17 @@ builder.Services.AddScoped<OrganisationService>();
 builder.Services.AddScoped<BrugerService>();
 builder.Services.AddScoped<LokationService>();
 builder.Services.AddScoped<RessourceService>();
+builder.Services.AddDataProtection();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.Configure<TTLockOptions>(builder.Configuration.GetSection("TTLock"));
+builder.Services.AddHttpClient<ITTLockKlient, TTLockKlient>(c => c.Timeout = TimeSpan.FromSeconds(10));
+builder.Services.AddSingleton<IHemmelighedBeskytter, DataProtectionBeskytter>();
+builder.Services.AddSingleton<TokenLaase>();
+builder.Services.AddScoped<TTLockTokenService>();
+builder.Services.AddScoped<TTLockForbindelseService>();
+builder.Services.AddScoped<SmsNummerService>();
+builder.Services.AddScoped<NoegleordService>();
+builder.Services.AddScoped<OplaasningService>();
 builder.Services.AddScoped<PlatformAdminSeeder>();
 builder.Services.AddScoped<LoginService>();
 
@@ -104,6 +115,18 @@ app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" })).AllowAnonymous();
+
+// Webhook fra InMobile. Åben for alle, men kun med en kendt hemmelig token i adressen; ukendt token giver 404.
+// Kendt token svarer altid 200, også når forsøget afvises (udfaldet står i oplåsningsloggen).
+app.MapMethods("/api/sms/{token}", ["GET", "POST"],
+        async (string token, HttpRequest request, OplaasningService oplaasning, CancellationToken ct) =>
+        {
+            var besked = await SmsEndpoint.LaesBeskedAsync(request, ct);
+            var resultat = await oplaasning.HaandterAsync(token, besked, ct);
+            return resultat.TokenKendt ? Results.Text("OK") : Results.NotFound();
+        })
+    .AllowAnonymous()
+    .DisableAntiforgery();
 
 // Logout er en POST med antiforgery-token, så et fremmed link ikke kan logge brugeren ud.
 app.MapPost("/logout", async (HttpContext context, IAntiforgery antiforgery, LoginService login) =>

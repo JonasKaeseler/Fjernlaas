@@ -156,6 +156,106 @@ namespace Fjernlaas.Web.Data.Migrations
                     b.ToTable("Lokation", (string)null);
                 });
 
+            modelBuilder.Entity("Fjernlaas.Web.Data.Noegleord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("OprettetTid")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Ord")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("OrdNormaliseret")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<Guid>("OrganisationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("RessourceId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("SmsNummerId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganisationId");
+
+                    b.HasIndex("RessourceId");
+
+                    b.HasIndex("SmsNummerId", "OrdNormaliseret")
+                        .IsUnique();
+
+                    b.ToTable("Noegleord", (string)null);
+                });
+
+            modelBuilder.Entity("Fjernlaas.Web.Data.Oplaasningsforsoeg", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Afsender")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("Fejltekst")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("Noegleord")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<Guid>("OrganisationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("RessourceId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("SmsNummerId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int?>("TTLockErrcode")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Tekst")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime>("TidspunktUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Udfald")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RessourceId");
+
+                    b.HasIndex("OrganisationId", "TidspunktUtc");
+
+                    b.HasIndex("SmsNummerId", "Afsender", "TidspunktUtc");
+
+                    b.ToTable("Oplaasningsforsoeg", (string)null);
+                });
+
             modelBuilder.Entity("Fjernlaas.Web.Data.Organisation", b =>
                 {
                     b.Property<Guid>("Id")
@@ -194,6 +294,9 @@ namespace Fjernlaas.Web.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<Guid?>("ForbindelseId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<Guid>("LokationId")
                         .HasColumnType("uniqueidentifier");
 
@@ -218,6 +321,9 @@ namespace Fjernlaas.Web.Data.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
 
+                    b.Property<long?>("TTLockLockId")
+                        .HasColumnType("bigint");
+
                     b.Property<string>("Type")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -225,12 +331,111 @@ namespace Fjernlaas.Web.Data.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ForbindelseId");
+
                     b.HasIndex("OrganisationId");
 
                     b.HasIndex("LokationId", "NavnNormaliseret")
                         .IsUnique();
 
                     b.ToTable("Ressource", (string)null);
+                });
+
+            modelBuilder.Entity("Fjernlaas.Web.Data.SmsNummer", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Navn")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("Nummer")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<DateTime>("OprettetTid")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("OrganisationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("TokenPraefiks")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganisationId");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.ToTable("SmsNummer", (string)null);
+                });
+
+            modelBuilder.Entity("Fjernlaas.Web.Data.TTLockForbindelse", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("AccessTokenBeskyttet")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("AdgangskodeHashBeskyttet")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Navn")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime>("OprettetTid")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("OrganisationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("RefreshTokenBeskyttet")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("SidsteFejl")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("TTLockBrugernavn")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<DateTime?>("TokenUdloeberTid")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganisationId");
+
+                    b.ToTable("TTLockForbindelse", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole<System.Guid>", b =>
@@ -383,8 +588,54 @@ namespace Fjernlaas.Web.Data.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Fjernlaas.Web.Data.Noegleord", b =>
+                {
+                    b.HasOne("Fjernlaas.Web.Data.Organisation", null)
+                        .WithMany()
+                        .HasForeignKey("OrganisationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Fjernlaas.Web.Data.Ressource", null)
+                        .WithMany()
+                        .HasForeignKey("RessourceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Fjernlaas.Web.Data.SmsNummer", null)
+                        .WithMany()
+                        .HasForeignKey("SmsNummerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Fjernlaas.Web.Data.Oplaasningsforsoeg", b =>
+                {
+                    b.HasOne("Fjernlaas.Web.Data.Organisation", null)
+                        .WithMany()
+                        .HasForeignKey("OrganisationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Fjernlaas.Web.Data.Ressource", null)
+                        .WithMany()
+                        .HasForeignKey("RessourceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Fjernlaas.Web.Data.SmsNummer", null)
+                        .WithMany()
+                        .HasForeignKey("SmsNummerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Fjernlaas.Web.Data.Ressource", b =>
                 {
+                    b.HasOne("Fjernlaas.Web.Data.TTLockForbindelse", null)
+                        .WithMany()
+                        .HasForeignKey("ForbindelseId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Fjernlaas.Web.Data.Lokation", "Lokation")
                         .WithMany("Ressourcer")
                         .HasForeignKey("LokationId")
@@ -398,6 +649,24 @@ namespace Fjernlaas.Web.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Lokation");
+                });
+
+            modelBuilder.Entity("Fjernlaas.Web.Data.SmsNummer", b =>
+                {
+                    b.HasOne("Fjernlaas.Web.Data.Organisation", null)
+                        .WithMany()
+                        .HasForeignKey("OrganisationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Fjernlaas.Web.Data.TTLockForbindelse", b =>
+                {
+                    b.HasOne("Fjernlaas.Web.Data.Organisation", null)
+                        .WithMany()
+                        .HasForeignKey("OrganisationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>

@@ -214,3 +214,8 @@ select.input { appearance: auto; }
 
 /* Blazor flytter fokus til sidens h1 ved navigation (tabindex="-1"). Ingen fokusramme om overskriften. */
 h1[tabindex="-1"]:focus { outline: none; }
+
+.section-title {
+    font-size: 1.15rem;
+    margin: 1.5rem 0 0.75rem;
+}

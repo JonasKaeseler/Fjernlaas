@@ -1,0 +1,453 @@
+@page "/sms"
+@rendermode InteractiveServer
+@attribute [Authorize(Policy = Politikker.Administration)]
+@inject IServiceScopeFactory ScopeFactory
+@inject AuthenticationStateProvider AuthState
+@inject NavigationManager Navigation
+
+<PageTitle>SMS og nøgleord – Fjernlås</PageTitle>
+
+<div class="page-head">
+    <div>
+        <h1 class="page-title">SMS-numre og nøgleord</h1>
+        <p class="muted">Hvert SMS-nummer har sin egen hemmelige webhook-adresse. Et nøgleord på nummeret åbner en bestemt ressource.</p>
+    </div>
+    <button type="button" class="btn btn-primary btn-inline" @onclick="VisOpretNummer">+ Tilføj SMS-nummer</button>
+</div>
+
+@if (_besked is not null)
+{
+    <div class="notice" role="status">@_besked</div>
+}
+
+@if (_nyUrl is not null)
+{
+    <div class="card card-flat">
+        <strong>Webhook-adresse for @_nyUrlNavn</strong>
+        <p class="muted">Adressen vises kun nu. Kopiér den ind i InMobile. Mister du den, kan du lave en ny adresse (den gamle holder så op med at virke).</p>
+        <input class="input" readonly value="@_nyUrl" @onfocus="VaelgAlt" />
+        <div class="actions">
+            <button type="button" class="btn btn-secondary btn-inline" @onclick="() => _nyUrl = null">Skjul</button>
+        </div>
+    </div>
+}
+
+@if (_viserNummerForm)
+{
+    <div class="card card-flat">
+        <div class="form-grid">
+            @if (_aktoer?.ErPlatformAdmin == true)
+            {
+                <div class="field field-wide">
+                    <label for="smsorg">Organisation</label>
+                    <select id="smsorg" class="input" @bind="_nummerOrg">
+                        <option value="">Vælg organisation</option>
+                        @foreach (var org in _organisationer)
+                        {
+                            <option value="@org.Id">@org.Navn</option>
+                        }
+                    </select>
+                </div>
+            }
+            <div class="field">
+                <label for="smsnavn">Navn</label>
+                <input id="smsnavn" class="input" @bind="_nummerNavn" @bind:event="oninput" placeholder="fx Roshage-nummer" />
+            </div>
+            <div class="field">
+                <label for="smsnr">Telefonnummer (valgfrit)</label>
+                <input id="smsnr" class="input" @bind="_nummerNummer" @bind:event="oninput" placeholder="fx 12345678" />
+            </div>
+        </div>
+        @if (_nummerFejl is not null)
+        {
+            <div class="alert" role="alert">@_nummerFejl</div>
+        }
+        <div class="actions">
+            <button type="button" class="btn btn-primary btn-inline" @onclick="OpretNummerAsync" disabled="@_arbejder">Opret SMS-nummer</button>
+            <button type="button" class="btn btn-secondary btn-inline" @onclick="() => _viserNummerForm = false">Annuller</button>
+        </div>
+    </div>
+}
+
+@if (_numre is null)
+{
+    <p class="muted">Henter…</p>
+}
+else if (_numre.Count == 0)
+{
+    <div class="card card-flat empty">
+        <strong>Ingen SMS-numre endnu</strong>
+        <p class="muted">Tryk på "Tilføj SMS-nummer" for at oprette det første.</p>
+    </div>
+}
+else
+{
+    <div class="card card-flat table-card">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Navn</th>
+                    @if (_aktoer?.ErPlatformAdmin == true)
+                    {
+                        <th>Organisation</th>
+                    }
+                    <th>Nummer</th>
+                    <th>Adresse starter med</th>
+                    <th>Nøgleord</th>
+                    <th>Status</th>
+                    <th class="actions-col"></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var n in _numre)
+                {
+                    <tr @key="n.Id">
+                        <td><strong>@n.Navn</strong></td>
+                        @if (_aktoer?.ErPlatformAdmin == true)
+                        {
+                            <td>@n.OrganisationNavn</td>
+                        }
+                        <td>@(n.Nummer ?? "–")</td>
+                        <td><code>/api/sms/@n.TokenPraefiks…</code></td>
+                        <td>@n.AntalNoegleord</td>
+                        <td>
+                            <span class="badge @(n.Status == SmsNummerStatus.Aktiv ? "badge-ok" : "badge-off")">
+                                @(n.Status == SmsNummerStatus.Aktiv ? "Aktiv" : "Deaktiveret")
+                            </span>
+                        </td>
+                        <td class="actions-col">
+                            <button type="button" class="btn btn-secondary btn-small" disabled="@_arbejder" @onclick="() => NytTokenAsync(n)">Ny adresse</button>
+                            <button type="button" class="btn btn-secondary btn-small" disabled="@_arbejder" @onclick="() => SkiftNummerStatusAsync(n)">
+                                @(n.Status == SmsNummerStatus.Aktiv ? "Deaktivér" : "Aktivér")
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <div class="page-head">
+        <div>
+            <h2 class="page-title">Nøgleord</h2>
+            <p class="muted">Første ord i SMS'en, uden forskel på store og små bogstaver.</p>
+        </div>
+        <button type="button" class="btn btn-primary btn-inline" @onclick="VisOpretOrd">+ Tilføj nøgleord</button>
+    </div>
+
+    @if (_viserOrdForm)
+    {
+        <div class="card card-flat">
+            <div class="form-grid">
+                <div class="field">
+                    <label for="ordnr">SMS-nummer</label>
+                    <select id="ordnr" class="input" @bind="_ordNummer">
+                        <option value="">Vælg SMS-nummer</option>
+                        @foreach (var n in _numre)
+                        {
+                            <option value="@n.Id">@n.Navn</option>
+                        }
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="ordres">Ressource</label>
+                    <select id="ordres" class="input" @bind="_ordRessource">
+                        <option value="">Vælg ressource</option>
+                        @foreach (var r in RessourcerFor(_ordNummer))
+                        {
+                            <option value="@r.Id">@r.LokationNavn – @r.Navn</option>
+                        }
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="ordord">Nøgleord</label>
+                    <input id="ordord" class="input" maxlength="@NoegleordService.MaxOrdLaengde" @bind="_ordOrd" @bind:event="oninput" placeholder="fx Roshage" />
+                </div>
+            </div>
+            @if (_ordFejl is not null)
+            {
+                <div class="alert" role="alert">@_ordFejl</div>
+            }
+            <div class="actions">
+                <button type="button" class="btn btn-primary btn-inline" @onclick="OpretOrdAsync" disabled="@_arbejder">Opret nøgleord</button>
+                <button type="button" class="btn btn-secondary btn-inline" @onclick="() => _viserOrdForm = false">Annuller</button>
+            </div>
+        </div>
+    }
+
+    @if (_ord is not null && _ord.Count > 0)
+    {
+        <div class="card card-flat table-card">
+            <table class="table">
+                <thead><tr><th>Nøgleord</th><th>SMS-nummer</th><th>Ressource</th><th>Status</th><th class="actions-col"></th></tr></thead>
+                <tbody>
+                    @foreach (var o in _ord)
+                    {
+                        <tr @key="o.Id">
+                            <td><strong>@o.Ord</strong></td>
+                            <td>@o.SmsNummerNavn</td>
+                            <td>@o.LokationNavn – @o.RessourceNavn</td>
+                            <td>
+                                <span class="badge @(o.Status == NoegleordStatus.Aktiv ? "badge-ok" : "badge-off")">
+                                    @(o.Status == NoegleordStatus.Aktiv ? "Aktiv" : "Deaktiveret")
+                                </span>
+                            </td>
+                            <td class="actions-col">
+                                <button type="button" class="btn btn-secondary btn-small" disabled="@_arbejder" @onclick="() => SkiftOrdStatusAsync(o)">
+                                    @(o.Status == NoegleordStatus.Aktiv ? "Deaktivér" : "Aktivér")
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+}
+
+@code {
+    private Aktoer? _aktoer;
+    private IReadOnlyList<OrganisationOversigt> _organisationer = [];
+    private IReadOnlyList<SmsNummerOversigt>? _numre;
+    private IReadOnlyList<NoegleordOversigt>? _ord;
+    private IReadOnlyList<RessourceOversigt> _ressourcer = [];
+
+    private string? _besked;
+    private bool _arbejder;
+    private string? _nyUrl;
+    private string _nyUrlNavn = string.Empty;
+
+    private bool _viserNummerForm;
+    private string _nummerOrg = string.Empty;
+    private string _nummerNavn = string.Empty;
+    private string _nummerNummer = string.Empty;
+    private string? _nummerFejl;
+
+    private bool _viserOrdForm;
+    private string _ordNummer = string.Empty;
+    private string _ordRessource = string.Empty;
+    private string _ordOrd = string.Empty;
+    private string? _ordFejl;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var tilstand = await AuthState.GetAuthenticationStateAsync();
+        _aktoer = Aktoer.Fra(tilstand.User);
+
+        if (_aktoer.ErPlatformAdmin)
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            _organisationer = await scope.ServiceProvider.GetRequiredService<OrganisationService>().OversigtAsync();
+        }
+
+        await HentAsync();
+    }
+
+    private async Task HentAsync()
+    {
+        if (_aktoer is null) return;
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var sp = scope.ServiceProvider;
+        _numre = await sp.GetRequiredService<SmsNummerService>().OversigtAsync(_aktoer);
+        _ord = await sp.GetRequiredService<NoegleordService>().OversigtAsync(_aktoer);
+        _ressourcer = await sp.GetRequiredService<RessourceService>().OversigtAsync(_aktoer);
+    }
+
+    private IEnumerable<RessourceOversigt> RessourcerFor(string nummerId)
+    {
+        if (!Guid.TryParse(nummerId, out var id)) return [];
+        var org = _numre?.FirstOrDefault(n => n.Id == id)?.OrganisationId;
+        return _ressourcer.Where(r => r.OrganisationId == org);
+    }
+
+    private string Webhook(string token) => Navigation.ToAbsoluteUri($"/api/sms/{token}").ToString();
+
+    private Task VaelgAlt(FocusEventArgs _) => Task.CompletedTask;
+
+    private void VisOpretNummer()
+    {
+        _viserNummerForm = true;
+        _nummerOrg = string.Empty;
+        _nummerNavn = string.Empty;
+        _nummerNummer = string.Empty;
+        _nummerFejl = null;
+        _besked = null;
+    }
+
+    private async Task OpretNummerAsync()
+    {
+        if (_arbejder || _aktoer is null) return;
+
+        Guid organisationId;
+        if (_aktoer.ErPlatformAdmin)
+        {
+            if (!Guid.TryParse(_nummerOrg, out organisationId))
+            {
+                _nummerFejl = "Vælg en organisation.";
+                return;
+            }
+        }
+        else if (_aktoer.OrganisationId is { } egen)
+        {
+            organisationId = egen;
+        }
+        else
+        {
+            _nummerFejl = Fejltekst(SmsNummerFejl.IkkeTilladt);
+            return;
+        }
+
+        _arbejder = true;
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var resultat = await scope.ServiceProvider.GetRequiredService<SmsNummerService>()
+                .OpretAsync(_aktoer, organisationId, _nummerNavn, _nummerNummer);
+
+            if (!resultat.Ok)
+            {
+                _nummerFejl = Fejltekst(resultat.Fejl);
+                return;
+            }
+
+            _nyUrl = Webhook(resultat.Token!);
+            _nyUrlNavn = resultat.SmsNummer!.Navn;
+            _besked = null;
+            _viserNummerForm = false;
+            await HentAsync();
+        }
+        finally
+        {
+            _arbejder = false;
+        }
+    }
+
+    private async Task NytTokenAsync(SmsNummerOversigt n)
+    {
+        if (_arbejder || _aktoer is null) return;
+        _arbejder = true;
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var resultat = await scope.ServiceProvider.GetRequiredService<SmsNummerService>().NytTokenAsync(_aktoer, n.Id);
+            if (resultat.Ok)
+            {
+                _nyUrl = Webhook(resultat.Token!);
+                _nyUrlNavn = n.Navn;
+                _besked = "Den gamle adresse virker ikke længere. Opdatér adressen i InMobile.";
+            }
+            else
+            {
+                _besked = Fejltekst(resultat.Fejl);
+            }
+            await HentAsync();
+        }
+        finally
+        {
+            _arbejder = false;
+        }
+    }
+
+    private async Task SkiftNummerStatusAsync(SmsNummerOversigt n)
+    {
+        if (_arbejder || _aktoer is null) return;
+        _arbejder = true;
+        try
+        {
+            var ny = n.Status == SmsNummerStatus.Aktiv ? SmsNummerStatus.Deaktiveret : SmsNummerStatus.Aktiv;
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var resultat = await scope.ServiceProvider.GetRequiredService<SmsNummerService>().SaetStatusAsync(_aktoer, n.Id, ny);
+            _besked = resultat.Ok
+                ? $"{n.Navn} er {(ny == SmsNummerStatus.Aktiv ? "aktiveret" : "deaktiveret")}."
+                : Fejltekst(resultat.Fejl);
+            await HentAsync();
+        }
+        finally
+        {
+            _arbejder = false;
+        }
+    }
+
+    private void VisOpretOrd()
+    {
+        _viserOrdForm = true;
+        _ordNummer = _numre is { Count: 1 } ? _numre[0].Id.ToString() : string.Empty;
+        _ordRessource = string.Empty;
+        _ordOrd = string.Empty;
+        _ordFejl = null;
+        _besked = null;
+    }
+
+    private async Task OpretOrdAsync()
+    {
+        if (_arbejder || _aktoer is null) return;
+        if (!Guid.TryParse(_ordNummer, out var nummerId) || !Guid.TryParse(_ordRessource, out var ressourceId))
+        {
+            _ordFejl = "Vælg både SMS-nummer og ressource.";
+            return;
+        }
+
+        _arbejder = true;
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var resultat = await scope.ServiceProvider.GetRequiredService<NoegleordService>()
+                .OpretAsync(_aktoer, nummerId, ressourceId, _ordOrd);
+
+            if (!resultat.Ok)
+            {
+                _ordFejl = Fejltekst(resultat.Fejl);
+                return;
+            }
+
+            _besked = $"Nøgleordet {resultat.Noegleord!.Ord} er oprettet.";
+            _viserOrdForm = false;
+            await HentAsync();
+        }
+        finally
+        {
+            _arbejder = false;
+        }
+    }
+
+    private async Task SkiftOrdStatusAsync(NoegleordOversigt o)
+    {
+        if (_arbejder || _aktoer is null) return;
+        _arbejder = true;
+        try
+        {
+            var ny = o.Status == NoegleordStatus.Aktiv ? NoegleordStatus.Deaktiveret : NoegleordStatus.Aktiv;
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var resultat = await scope.ServiceProvider.GetRequiredService<NoegleordService>().SaetStatusAsync(_aktoer, o.Id, ny);
+            _besked = resultat.Ok
+                ? $"Nøgleordet {o.Ord} er {(ny == NoegleordStatus.Aktiv ? "aktiveret" : "deaktiveret")}."
+                : Fejltekst(resultat.Fejl);
+            await HentAsync();
+        }
+        finally
+        {
+            _arbejder = false;
+        }
+    }
+
+    private static string Fejltekst(SmsNummerFejl fejl) => fejl switch
+    {
+        SmsNummerFejl.IkkeTilladt => "Du har ikke ret til at gøre det.",
+        SmsNummerFejl.NavnUgyldigt => "Skriv et navn.",
+        SmsNummerFejl.NummerUgyldigt => "Telefonnummeret er ikke gyldigt.",
+        SmsNummerFejl.OrganisationIkkeFundet => "Organisationen findes ikke længere.",
+        SmsNummerFejl.IkkeFundet => "SMS-nummeret findes ikke længere.",
+        _ => "Noget gik galt. Prøv igen."
+    };
+
+    private static string Fejltekst(NoegleordFejl fejl) => fejl switch
+    {
+        NoegleordFejl.IkkeTilladt => "Du har ikke ret til at gøre det.",
+        NoegleordFejl.OrdUgyldigt => $"Nøgleordet skal være ét ord uden mellemrum eller semikolon, højst {NoegleordService.MaxOrdLaengde} tegn.",
+        NoegleordFejl.OrdFindesAllerede => "Nøgleordet findes allerede på det SMS-nummer.",
+        NoegleordFejl.SmsNummerIkkeFundet => "SMS-nummeret findes ikke.",
+        NoegleordFejl.RessourceIkkeFundet => "Ressourcen findes ikke i samme organisation.",
+        NoegleordFejl.IkkeFundet => "Nøgleordet findes ikke længere.",
+        _ => "Noget gik galt. Prøv igen."
+    };
+}

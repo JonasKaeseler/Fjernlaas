@@ -62,6 +62,50 @@ else
         </div>
     }
 
+    @if (_koblerId is not null)
+    {
+        <div class="card card-flat">
+            <strong>Kobl lås til @(_ressourcer?.FirstOrDefault(x => x.Id == _koblerId)?.Navn)</strong>
+            <div class="form-grid">
+                <div class="field">
+                    <label for="kobforb">TTLock-forbindelse</label>
+                    <select id="kobforb" class="input" value="@_koblForbindelse" @onchange="VaelgForbindelseAsync">
+                        <option value="">Vælg forbindelse</option>
+                        @foreach (var f in _forbindelser)
+                        {
+                            <option value="@f.Id">@f.Navn</option>
+                        }
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="koblaas">Lås</label>
+                    @if (_laase is { Count: > 0 })
+                    {
+                        <select id="koblaas" class="input" @bind="_koblLockId">
+                            <option value="">Vælg lås</option>
+                            @foreach (var l in _laase)
+                            {
+                                <option value="@l.LockId">@(string.IsNullOrWhiteSpace(l.Alias) ? l.Navn : l.Alias) (@l.LockId)@(l.HarGateway ? "" : " – ingen gateway")</option>
+                            }
+                        </select>
+                    }
+                    else
+                    {
+                        <input id="koblaas" class="input" @bind="_koblLockId" @bind:event="oninput" placeholder="Lås-id (hvis listen ikke kan hentes)" />
+                    }
+                </div>
+            </div>
+            @if (_koblFejl is not null)
+            {
+                <div class="alert" role="alert">@_koblFejl</div>
+            }
+            <div class="actions">
+                <button type="button" class="btn btn-primary btn-inline" @onclick="GemKoblingAsync" disabled="@_arbejder">Gem kobling</button>
+                <button type="button" class="btn btn-secondary btn-inline" @onclick="() => _koblerId = null">Annuller</button>
+            </div>
+        </div>
+    }
+
     @if (_ressourcer is null || _ressourcer.Count == 0)
     {
         <div class="card card-flat empty">
@@ -76,7 +120,7 @@ else
                 <thead>
                     <tr>
                         <th>Navn</th>
-                        <th>Type</th>
+                        <th>Lås</th>
                         <th>Status</th>
                         <th class="actions-col"></th>
                     </tr>
@@ -86,13 +130,14 @@ else
                     {
                         <tr @key="r.Id">
                             <td><strong>@r.Navn</strong></td>
-                            <td>Dør</td>
+                            <td>@(r.TTLockLockId is { } lid ? $"Lås {lid}" : "Ikke koblet")</td>
                             <td>
                                 <span class="badge @(r.Status == RessourceStatus.Aktiv ? "badge-ok" : "badge-wait")">
                                     @(r.Status == RessourceStatus.Aktiv ? "Aktiv" : "På pause")
                                 </span>
                             </td>
                             <td class="actions-col">
+                                <button type="button" class="btn btn-secondary btn-small" @onclick="() => VisKoblAsync(r)">Kobl lås</button>
                                 <button type="button" class="btn btn-secondary btn-small" @onclick="() => VisOmdoeb(r)">Omdøb</button>
                                 <button type="button" class="btn btn-secondary btn-small" disabled="@_arbejder" @onclick="() => SkiftStatusAsync(r)">
                                     @(r.Status == RessourceStatus.Aktiv ? "Sæt på pause" : "Aktivér")
@@ -121,6 +166,90 @@ else
     private Guid? _formId;
     private string _formNavn = string.Empty;
     private string? _formFejl;
+
+    private IReadOnlyList<ForbindelseOversigt> _forbindelser = [];
+    private IReadOnlyList<TTLockLaas>? _laase;
+    private Guid? _koblerId;
+    private string _koblForbindelse = string.Empty;
+    private string _koblLockId = string.Empty;
+    private string? _koblFejl;
+
+    private async Task VisKoblAsync(RessourceOversigt r)
+    {
+        if (_aktoer is null) return;
+        _koblerId = r.Id;
+        _koblFejl = null;
+        _laase = null;
+        _koblLockId = r.TTLockLockId?.ToString() ?? string.Empty;
+        _koblForbindelse = r.ForbindelseId?.ToString() ?? string.Empty;
+        _besked = null;
+
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        _forbindelser = (await scope.ServiceProvider.GetRequiredService<TTLockForbindelseService>()
+            .OversigtAsync(_aktoer, r.OrganisationId))
+            .Where(f => f.Status == ForbindelseStatus.Aktiv).ToList();
+
+        if (r.ForbindelseId is { } fid) await HentLaaseAsync(fid, bevarValg: true);
+    }
+
+    private async Task VaelgForbindelseAsync(ChangeEventArgs e)
+    {
+        _koblForbindelse = e.Value?.ToString() ?? string.Empty;
+        _koblLockId = string.Empty;
+        _laase = null;
+        _koblFejl = null;
+        if (Guid.TryParse(_koblForbindelse, out var id)) await HentLaaseAsync(id, bevarValg: false);
+    }
+
+    private async Task HentLaaseAsync(Guid forbindelseId, bool bevarValg)
+    {
+        if (_aktoer is null) return;
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var resultat = await scope.ServiceProvider.GetRequiredService<TTLockForbindelseService>().LaaseAsync(_aktoer, forbindelseId);
+        if (resultat.Ok)
+        {
+            _laase = resultat.Laase;
+        }
+        else
+        {
+            _koblFejl = resultat.Detalje is { Length: > 0 } d
+                ? $"Kunne ikke hente låse fra TTLock: {d}. Du kan skrive lås-id'et i hånden."
+                : "Kunne ikke hente låse fra TTLock. Du kan skrive lås-id'et i hånden.";
+        }
+    }
+
+    private async Task GemKoblingAsync()
+    {
+        if (_arbejder || _aktoer is null || _koblerId is not { } id) return;
+
+        Guid? forbindelseId = Guid.TryParse(_koblForbindelse, out var f) ? f : null;
+        long? lockId = long.TryParse(_koblLockId, out var l) ? l : null;
+        if ((forbindelseId is null) != (lockId is null))
+        {
+            _koblFejl = "Vælg både forbindelse og lås.";
+            return;
+        }
+
+        _arbejder = true;
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var resultat = await scope.ServiceProvider.GetRequiredService<RessourceService>().KoblAsync(_aktoer, id, forbindelseId, lockId);
+            if (!resultat.Ok)
+            {
+                _koblFejl = Fejltekst(resultat.Fejl);
+                return;
+            }
+
+            _besked = forbindelseId is null ? "Koblingen er fjernet." : "Låsen er koblet til ressourcen.";
+            _koblerId = null;
+            await HentAsync();
+        }
+        finally
+        {
+            _arbejder = false;
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -225,6 +354,8 @@ else
         RessourceFejl.NavnFindesAllerede => "Der findes allerede en ressource med det navn på lokationen.",
         RessourceFejl.LokationIkkeFundet => "Lokationen findes ikke længere.",
         RessourceFejl.IkkeFundet => "Ressourcen findes ikke længere.",
+        RessourceFejl.ForbindelseIkkeFundet => "Forbindelsen findes ikke i samme organisation.",
+        RessourceFejl.KoblingUgyldig => "Vælg både forbindelse og lås, eller ingen af dem.",
         _ => "Noget gik galt. Prøv igen."
     };
 }
