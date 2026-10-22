@@ -1,0 +1,179 @@
+@page "/log"
+@rendermode InteractiveServer
+@attribute [Authorize(Policy = Politikker.Administration)]
+@inject IServiceScopeFactory ScopeFactory
+@inject AuthenticationStateProvider AuthState
+
+<PageTitle>Oplåsningslog – Fjernlås</PageTitle>
+
+<div class="page-head">
+    <div>
+        <h1 class="page-title">Oplåsningslog</h1>
+        <p class="muted">Alle forsøg på at åbne en dør via SMS, også de afviste. Tider vises i dansk tid.</p>
+    </div>
+    <button type="button" class="btn btn-secondary btn-inline" @onclick="OpdaterAsync" disabled="@_arbejder">Opdatér</button>
+</div>
+
+<div class="card card-flat">
+    <div class="form-grid">
+        <div class="field">
+            <label for="logudfald">Udfald</label>
+            <select id="logudfald" class="input" @bind="_udfald">
+                <option value="">Alle</option>
+                @foreach (var u in Enum.GetValues<Udfald>())
+                {
+                    <option value="@u">@OplaasningsLogService.UdfaldTekst(u)</option>
+                }
+            </select>
+        </div>
+        <div class="field">
+            <label for="lognr">SMS-nummer</label>
+            <select id="lognr" class="input" @bind="_nummer">
+                <option value="">Alle</option>
+                @foreach (var n in _numre)
+                {
+                    <option value="@n.Id">@n.Navn</option>
+                }
+            </select>
+        </div>
+        <div class="field">
+            <label for="logfra">Fra dato</label>
+            <input id="logfra" type="date" class="input" @bind="_fra" />
+        </div>
+        <div class="field">
+            <label for="logtil">Til og med dato</label>
+            <input id="logtil" type="date" class="input" @bind="_til" />
+        </div>
+    </div>
+    <div class="actions">
+        <button type="button" class="btn btn-primary btn-inline" @onclick="SoegAsync" disabled="@_arbejder">Vis</button>
+    </div>
+</div>
+
+@if (_data is null)
+{
+    <p class="muted">Henter…</p>
+}
+else if (_data.Raekker.Count == 0)
+{
+    <div class="card card-flat empty">
+        <strong>Ingen forsøg fundet</strong>
+        <p class="muted">Der er ingen forsøg, der passer til filteret.</p>
+    </div>
+}
+else
+{
+    <div class="card card-flat table-card">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Tidspunkt</th>
+                    @if (_aktoer?.ErPlatformAdmin == true)
+                    {
+                        <th>Organisation</th>
+                    }
+                    <th>Afsender</th>
+                    <th>SMS-tekst</th>
+                    <th>Ressource</th>
+                    <th>Udfald</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var r in _data.Raekker)
+                {
+                    <tr @key="r.Id">
+                        <td>@Lokal(r.TidspunktUtc)</td>
+                        @if (_aktoer?.ErPlatformAdmin == true)
+                        {
+                            <td>@r.OrganisationNavn</td>
+                        }
+                        <td>@r.Afsender</td>
+                        <td>@r.Tekst</td>
+                        <td>@(r.RessourceNavn is null ? "–" : $"{r.LokationNavn} – {r.RessourceNavn}")</td>
+                        <td>
+                            <span class="badge @(r.Udfald == Udfald.Aabnet ? "badge-ok" : r.Udfald == Udfald.TTLockFejl ? "badge-off" : "badge-wait")">
+                                @OplaasningsLogService.UdfaldTekst(r.Udfald)
+                            </span>
+                            @if (r.Fejltekst is not null)
+                            {
+                                <div class="muted">@r.Fejltekst@(r.TTLockErrcode is { } k ? $" (kode {k})" : "")</div>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <div class="actions">
+        <button type="button" class="btn btn-secondary btn-inline" disabled="@(_data.Side <= 1 || _arbejder)" @onclick="() => GaaTilAsync(_data.Side - 1)">Forrige</button>
+        <span class="muted">Side @_data.Side af @_data.AntalSider (@_data.Total forsøg)</span>
+        <button type="button" class="btn btn-secondary btn-inline" disabled="@(_data.Side >= _data.AntalSider || _arbejder)" @onclick="() => GaaTilAsync(_data.Side + 1)">Næste</button>
+    </div>
+}
+
+@code {
+    private static readonly TimeZoneInfo Zone = FindZone();
+
+    private Aktoer? _aktoer;
+    private IReadOnlyList<SmsNummerOversigt> _numre = [];
+    private LogSide? _data;
+    private bool _arbejder;
+
+    private string _udfald = string.Empty;
+    private string _nummer = string.Empty;
+    private DateTime? _fra;
+    private DateTime? _til;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var tilstand = await AuthState.GetAuthenticationStateAsync();
+        _aktoer = Aktoer.Fra(tilstand.User);
+
+        await using (var scope = ScopeFactory.CreateAsyncScope())
+        {
+            _numre = await scope.ServiceProvider.GetRequiredService<SmsNummerService>().OversigtAsync(_aktoer);
+        }
+
+        await HentAsync(1);
+    }
+
+    private Task SoegAsync() => HentAsync(1);
+
+    private Task OpdaterAsync() => HentAsync(_data?.Side ?? 1);
+
+    private Task GaaTilAsync(int side) => HentAsync(side);
+
+    private async Task HentAsync(int side)
+    {
+        if (_aktoer is null || _arbejder) return;
+        _arbejder = true;
+        try
+        {
+            var filter = new LogFilter(
+                Enum.TryParse<Udfald>(_udfald, out var u) ? u : null,
+                Guid.TryParse(_nummer, out var n) ? n : null,
+                _fra is { } fra ? TilUtc(fra.Date) : null,
+                _til is { } til ? TilUtc(til.Date.AddDays(1)) : null);
+
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            _data = await scope.ServiceProvider.GetRequiredService<OplaasningsLogService>().HentAsync(_aktoer, filter, side);
+        }
+        finally
+        {
+            _arbejder = false;
+        }
+    }
+
+    private static DateTime TilUtc(DateTime lokalDato) =>
+        TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(lokalDato, DateTimeKind.Unspecified), Zone);
+
+    private static string Lokal(DateTime utc) =>
+        TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), Zone).ToString("dd.MM.yyyy HH:mm:ss");
+
+    private static TimeZoneInfo FindZone()
+    {
+        try { return TimeZoneInfo.FindSystemTimeZoneById("Europe/Copenhagen"); }
+        catch (TimeZoneNotFoundException) { return TimeZoneInfo.FindSystemTimeZoneById("Romance Standard Time"); }
+    }
+}

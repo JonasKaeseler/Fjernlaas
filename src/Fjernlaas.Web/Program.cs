@@ -76,6 +76,7 @@ builder.Services.AddScoped<TTLockForbindelseService>();
 builder.Services.AddScoped<SmsNummerService>();
 builder.Services.AddScoped<NoegleordService>();
 builder.Services.AddScoped<OplaasningService>();
+builder.Services.AddScoped<OplaasningsLogService>();
 builder.Services.AddScoped<PlatformAdminSeeder>();
 builder.Services.AddScoped<LoginService>();
 
