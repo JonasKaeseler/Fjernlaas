@@ -219,3 +219,139 @@ h1[tabindex="-1"]:focus { outline: none; }
     font-size: 1.15rem;
     margin: 1.5rem 0 0.75rem;
 }
+
+/* Lokationsoversigt: filtre og kort */
+.filterbar { display: flex; flex-direction: column; gap: 12px; }
+.filter-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+.filter-row .field { margin-bottom: 0; flex: 0 1 200px; }
+.filter-row .field-grow { flex: 1 1 260px; }
+.filter-foot { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; }
+.segmented { display: flex; padding: 3px; gap: 2px; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--surface); }
+.seg { font: inherit; font-size: 13px; font-weight: 600; height: 32px; padding: 0 14px; border: 0; border-radius: 6px; background: transparent; color: var(--ink); cursor: pointer; }
+.seg-on { background: var(--primary-soft); color: var(--link); }
+.seg:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+.loc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 16px; }
+.loc-card { display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.loc-head { display: flex; justify-content: space-between; align-items: flex-start; padding: 14px 16px; background: #ece8e0; min-height: 76px; }
+.loc-icon { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 10px; background: var(--surface); color: var(--muted); }
+.loc-body { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px 16px; flex: 1; }
+.loc-name { font-size: 16px; font-weight: 600; margin: 0; }
+.loc-name a { color: var(--ink); text-decoration: none; }
+.loc-name a:hover { text-decoration: underline; }
+.loc-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; margin: 0; padding-top: 10px; border-top: 1px solid var(--line); }
+.loc-facts dt { font-size: 12px; color: var(--muted); }
+.loc-facts dd { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
+.loc-fact-wide { grid-column: 1 / -1; }
+.mono { font-family: var(--mono); }
+.loc-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; padding-top: 4px; }
+.loc-actions .btn { flex: 1 1 0; min-height: 40px; }
+.btn-link { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+
+.btn-add { display: inline-flex; align-items: center; gap: 8px; }
+.chips { display: flex; gap: 6px; overflow-x: auto; }
+.chip { flex: 0 0 auto; font: inherit; font-size: 14px; font-weight: 500; height: 38px; padding: 0 14px; border-radius: 19px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); cursor: pointer; white-space: nowrap; }
+.chip-on { background: var(--ink); border-color: var(--ink); color: #fff; }
+.chip:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.loc-chev { display: none; }
+
+/* Mobil: bundmenu */
+.tabbar, .more-panel { display: none; }
+
+@media (max-width: 800px) {
+    .shell { display: block; }
+    .sidebar { display: none; }
+    .content { padding: 16px 16px 96px; max-width: none; }
+    .page-title { font-size: 22px; }
+
+    .tabbar {
+        position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+        display: flex; height: 76px; padding: 6px 8px 18px;
+        background: var(--surface-soft); border-top: 1px solid var(--line);
+    }
+    .tab {
+        flex: 1 1 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+        text-decoration: none; color: #3d4852; font-size: 11.5px; font-weight: 500; list-style: none; cursor: pointer;
+        background: none; border: 0;
+    }
+    .tab::-webkit-details-marker { display: none; }
+    .tab-ic { display: flex; padding: 2px 16px; border-radius: 14px; }
+    .tab.active { color: var(--link); font-weight: 700; }
+    .tab.active .tab-ic { background: var(--primary-soft); }
+    .tab:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; border-radius: 8px; }
+
+    .more { flex: 1 1 0; display: flex; }
+    .more > summary { flex: 1; }
+    .more[open] > summary { color: var(--link); font-weight: 700; }
+    .more[open] .more-panel {
+        display: flex; flex-direction: column; gap: 4px;
+        position: absolute; right: 8px; bottom: 84px; width: min(280px, calc(100vw - 16px));
+        padding: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+        box-shadow: 0 8px 24px rgba(34, 48, 60, .18);
+    }
+    .more-link { display: flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: 8px; color: var(--ink); text-decoration: none; font-weight: 500; }
+    .more-link.active { background: var(--primary-soft); color: var(--link); font-weight: 600; }
+    .more-user { padding: 10px 12px 8px; border-top: 1px solid var(--line); margin-top: 4px; }
+
+    .btn-add { width: 44px; height: 44px; padding: 0; justify-content: center; flex: none; }
+    .btn-add .lbl { display: none; }
+    .page-head p.muted { font-size: 13px; }
+
+    .segmented { display: none; }
+    .filter-row .field, .filter-row .field-grow { flex: 1 1 100%; }
+
+    /* Lokationskort bliver til kompakte rækker */
+    .loc-grid { grid-template-columns: 1fr; gap: 8px; }
+    .loc-card { display: grid; grid-template-columns: 64px 1fr; gap: 0 12px; padding: 10px; border-radius: 10px; }
+    .loc-head { display: contents; }
+    .loc-icon { grid-row: 1 / 4; width: 64px; height: 64px; background: #ece8e0; border-radius: 8px; }
+    .loc-head .badge { grid-column: 2; grid-row: 3; justify-self: start; align-self: start; margin-top: 4px; }
+    .loc-body { display: contents; }
+    .loc-name { grid-column: 2; grid-row: 1; align-self: start; font-size: 15px; }
+    .loc-body > .muted { grid-column: 2; grid-row: 2; font-size: 13px; }
+    .loc-facts, .loc-actions { grid-column: 1 / -1; }
+    .loc-facts { margin-top: 10px; }
+    .loc-actions { margin-top: 8px; padding-top: 0; }
+    .loc-chev { display: none; }
+}
+
+.btn-inline { white-space: nowrap; }
+.sms-tekst { max-width: 28ch; overflow-wrap: anywhere; }
+.table td { vertical-align: top; }
+
+/* Sammenklappelige filtre */
+.filter-details > summary { cursor: pointer; font-weight: 600; list-style: none; display: flex; align-items: center; justify-content: space-between; min-height: 24px; }
+.filter-details > summary::-webkit-details-marker { display: none; }
+.filter-details > summary::after { content: ""; width: 8px; height: 8px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(45deg); margin-right: 4px; transition: transform .15s; }
+.filter-details[open] > summary::after { transform: rotate(-135deg); }
+.filter-details[open] > summary { margin-bottom: 14px; }
+.filter-details > summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 4px; border-radius: 4px; }
+
+@media (max-width: 800px) {
+    .page-head { flex-wrap: nowrap; }
+    .page-head > div { min-width: 0; }
+    .filter { flex-direction: column; align-items: stretch; }
+    .filter .field { max-width: none; }
+
+    /* Tabeller som kort */
+    .table-card { overflow: visible; background: transparent; border: 0; }
+    .table, .table tbody, .table tr, .table td { display: block; width: 100%; }
+    .table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+    .table tbody tr { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 10px; padding: 6px 14px; }
+    .table td { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding: 8px 0; border-bottom: 1px solid var(--line); text-align: right; overflow-wrap: anywhere; }
+    .table td:last-child, .table tbody tr:last-child td { border-bottom: 0; }
+    .table td[data-label]::before { content: attr(data-label); flex: 0 0 38%; text-align: left; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; padding-top: 2px; }
+    .table td > * { min-width: 0; }
+    .table .num { text-align: right; }
+    .table td.actions-col { justify-content: flex-start; flex-wrap: wrap; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); border-bottom: 0; text-align: left; white-space: normal; }
+    .table .actions-col .btn + .btn { margin-left: 0; }
+    .sms-tekst { max-width: none; }
+}
+
+.udfald-celle { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
+.udfald-celle .badge { white-space: normal; text-align: left; }
+.fejltekst { font-size: 13px; overflow-wrap: anywhere; }
+@media (max-width: 800px) {
+    .table td > .udfald-celle { flex: 1 1 0; align-items: flex-end; text-align: right; }
+    .udfald-celle .badge { text-align: right; }
+}

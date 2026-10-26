@@ -11,7 +11,7 @@
         <h1 class="page-title">Lokationer</h1>
         <p class="muted">Steder med døre og andre ressourcer, fx en butik. Åbn en lokation for at se dens ressourcer.</p>
     </div>
-    <button type="button" class="btn btn-primary btn-inline" @onclick="VisOpret">+ Tilføj lokation</button>
+    <button type="button" class="btn btn-primary btn-inline btn-add" aria-label="Tilføj lokation" @onclick="VisOpret"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg><span class="lbl">Tilføj lokation</span></button>
 </div>
 
 @if (_besked is not null)
@@ -81,48 +81,131 @@ else if (_lokationer.Count == 0)
 }
 else
 {
-    <div class="card card-flat table-card">
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>Navn</th>
-                    @if (_aktoer?.ErPlatformAdmin == true)
-                    {
-                        <th>Organisation</th>
-                    }
-                    <th>Adresse</th>
-                    <th>Ressourcer</th>
-                    <th>Status</th>
-                    <th class="actions-col"></th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var l in _lokationer)
-                {
-                    <tr @key="l.Id">
-                        <td><a href="lokationer/@l.Id"><strong>@l.Navn</strong></a></td>
-                        @if (_aktoer?.ErPlatformAdmin == true)
+    <section class="card card-flat filterbar" aria-label="Filtre">
+        <div class="filter-row">
+            <div class="field field-grow">
+                <label for="lok-soeg">Søg</label>
+                <input id="lok-soeg" type="search" class="input" placeholder="Navn eller adresse" @bind="_soeg" @bind:event="oninput" />
+            </div>
+            @if (_aktoer?.ErPlatformAdmin == true)
+            {
+                <div class="field">
+                    <label for="lok-org">Organisation</label>
+                    <select id="lok-org" class="input" @bind="_orgFilter">
+                        <option value="alle">Alle</option>
+                        @foreach (var org in _organisationer)
                         {
-                            <td>@l.OrganisationNavn</td>
+                            <option value="@org.Id">@org.Navn</option>
                         }
-                        <td>@(l.Adresse ?? "–")</td>
-                        <td>@l.AntalRessourcer</td>
-                        <td>
-                            <span class="badge @(l.Status == LokationStatus.Aktiv ? "badge-ok" : "badge-off")">
-                                @(l.Status == LokationStatus.Aktiv ? "Aktiv" : "Deaktiveret")
-                            </span>
-                        </td>
-                        <td class="actions-col">
+                    </select>
+                </div>
+            }
+        </div>
+        <div class="chips" role="group" aria-label="Status">
+            @foreach (var (v, l) in new[] { ("alle", "Alle"), ("aktiv", "Aktiv"), ("deaktiveret", "Deaktiveret") })
+            {
+                <button type="button" class="chip @(_statusFilter == v ? "chip-on" : "")" aria-pressed="@(_statusFilter == v ? "true" : "false")" @onclick="() => _statusFilter = v">@l</button>
+            }
+        </div>
+        <div class="filter-foot">
+            <span class="muted" aria-live="polite">@Antaltekst()</span>
+            <div class="segmented" role="group" aria-label="Visning">
+                <button type="button" class="seg @(_visKort ? "seg-on" : "")" aria-pressed="@(_visKort ? "true" : "false")" @onclick="() => _visKort = true">Kort</button>
+                <button type="button" class="seg @(!_visKort ? "seg-on" : "")" aria-pressed="@(_visKort ? "false" : "true")" @onclick="() => _visKort = false">Liste</button>
+            </div>
+        </div>
+    </section>
+
+    var synlige = Synlige();
+    if (synlige.Count == 0)
+    {
+        <div class="card card-flat empty">
+            <strong>Ingen lokationer matcher filtrene</strong>
+            <p class="muted">Prøv et andet søgeord, eller nulstil filtrene.</p>
+            <button type="button" class="btn btn-secondary btn-inline" @onclick="NulstilFiltre">Nulstil filtre</button>
+        </div>
+    }
+    else if (_visKort)
+    {
+        <div class="loc-grid">
+            @foreach (var l in synlige)
+            {
+                <article class="loc-card" @key="l.Id">
+                    <div class="loc-head">
+                        <div class="loc-icon" aria-hidden="true">
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"></path><circle cx="12" cy="9.5" r="2.5"></circle></svg>
+                        </div>
+                        <span class="badge @(l.Status == LokationStatus.Aktiv ? "badge-ok" : "badge-off")">@(l.Status == LokationStatus.Aktiv ? "Aktiv" : "Deaktiveret")</span>
+                    </div>
+                    <div class="loc-body">
+                        <h2 class="loc-name"><a href="lokationer/@l.Id">@l.Navn</a></h2>
+                        <svg class="loc-chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+                        <span class="muted">@(l.Adresse ?? "Ingen adresse")</span>
+                        <dl class="loc-facts">
+                            <div><dt>Ressourcer</dt><dd class="mono">@l.AntalRessourcer</dd></div>
+                            <div><dt>Tidszone</dt><dd class="mono">@l.Tidszone</dd></div>
+                            @if (_aktoer?.ErPlatformAdmin == true)
+                            {
+                                <div class="loc-fact-wide"><dt>Organisation</dt><dd>@l.OrganisationNavn</dd></div>
+                            }
+                        </dl>
+                        <div class="loc-actions">
+                            <a class="btn btn-secondary btn-small btn-link" href="lokationer/@l.Id">Åbn</a>
                             <button type="button" class="btn btn-secondary btn-small" @onclick="() => VisRediger(l)">Rediger</button>
                             <button type="button" class="btn btn-secondary btn-small" disabled="@_arbejder" @onclick="() => SkiftStatusAsync(l)">
                                 @(l.Status == LokationStatus.Aktiv ? "Deaktivér" : "Aktivér")
                             </button>
-                        </td>
+                        </div>
+                    </div>
+                </article>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="card card-flat table-card">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Navn</th>
+                        @if (_aktoer?.ErPlatformAdmin == true)
+                        {
+                            <th>Organisation</th>
+                        }
+                        <th>Adresse</th>
+                        <th>Ressourcer</th>
+                        <th>Status</th>
+                        <th class="actions-col"></th>
                     </tr>
-                }
-            </tbody>
-        </table>
-    </div>
+                </thead>
+                <tbody>
+                    @foreach (var l in synlige)
+                    {
+                        <tr @key="l.Id">
+                            <td><a href="lokationer/@l.Id"><strong>@l.Navn</strong></a></td>
+                            @if (_aktoer?.ErPlatformAdmin == true)
+                            {
+                                <td>@l.OrganisationNavn</td>
+                            }
+                            <td>@(l.Adresse ?? "–")</td>
+                            <td>@l.AntalRessourcer</td>
+                            <td>
+                                <span class="badge @(l.Status == LokationStatus.Aktiv ? "badge-ok" : "badge-off")">
+                                    @(l.Status == LokationStatus.Aktiv ? "Aktiv" : "Deaktiveret")
+                                </span>
+                            </td>
+                            <td class="actions-col">
+                                <button type="button" class="btn btn-secondary btn-small" @onclick="() => VisRediger(l)">Rediger</button>
+                                <button type="button" class="btn btn-secondary btn-small" disabled="@_arbejder" @onclick="() => SkiftStatusAsync(l)">
+                                    @(l.Status == LokationStatus.Aktiv ? "Deaktivér" : "Aktivér")
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
 }
 
 @code {
@@ -132,6 +215,11 @@ else
 
     private string? _besked;
     private bool _arbejder;
+
+    private string _soeg = string.Empty;
+    private string _statusFilter = "alle";
+    private string _orgFilter = "alle";
+    private bool _visKort = true;
 
     private bool _viserForm;
     private Guid? _formId;
@@ -160,6 +248,33 @@ else
         if (_aktoer is null) return;
         await using var scope = ScopeFactory.CreateAsyncScope();
         _lokationer = await scope.ServiceProvider.GetRequiredService<LokationService>().OversigtAsync(_aktoer);
+    }
+
+    private List<LokationOversigt> Synlige()
+    {
+        var soeg = _soeg.Trim();
+        return (_lokationer ?? [])
+            .Where(l => _statusFilter == "alle"
+                || (_statusFilter == "aktiv") == (l.Status == LokationStatus.Aktiv))
+            .Where(l => _orgFilter == "alle" || l.OrganisationId.ToString() == _orgFilter)
+            .Where(l => soeg.Length == 0
+                || l.Navn.Contains(soeg, StringComparison.CurrentCultureIgnoreCase)
+                || (l.Adresse?.Contains(soeg, StringComparison.CurrentCultureIgnoreCase) ?? false))
+            .ToList();
+    }
+
+    private string Antaltekst()
+    {
+        var n = Synlige().Count;
+        var alle = _lokationer?.Count ?? 0;
+        return n == alle ? $"{alle} lokationer" : $"{n} af {alle} lokationer";
+    }
+
+    private void NulstilFiltre()
+    {
+        _soeg = string.Empty;
+        _statusFilter = "alle";
+        _orgFilter = "alle";
     }
 
     private void VisOpret()

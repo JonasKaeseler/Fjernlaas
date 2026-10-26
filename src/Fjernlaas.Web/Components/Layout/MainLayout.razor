@@ -45,6 +45,40 @@
     </main>
 </div>
 
+<nav class="tabbar" aria-label="Hovedmenu (mobil)">
+    <NavLink href="" Match="NavLinkMatch.All" class="tab"><span class="tab-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"></rect><rect x="14" y="3" width="7" height="5" rx="1.5"></rect><rect x="14" y="12" width="7" height="9" rx="1.5"></rect><rect x="3" y="16" width="7" height="5" rx="1.5"></rect></svg></span>Oversigt</NavLink>
+    <AuthorizeView Policy="@Politikker.Administration">
+        <NavLink href="lokationer" class="tab"><span class="tab-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"></path><circle cx="12" cy="9.5" r="2.5"></circle></svg></span>Lokationer</NavLink>
+        <NavLink href="log" class="tab"><span class="tab-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"></path></svg></span>Log</NavLink>
+    </AuthorizeView>
+    <details class="more">
+        <summary class="tab"><span class="tab-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg></span>Mere</summary>
+        <div class="more-panel">
+            <AuthorizeView Policy="@Politikker.PlatformAdmin">
+                <NavLink href="organisationer" class="more-link">Organisationer</NavLink>
+            </AuthorizeView>
+            <AuthorizeView Policy="@Politikker.Administration">
+                <NavLink href="forbindelser" class="more-link">TTLock</NavLink>
+                <NavLink href="sms" class="more-link">SMS og nøgleord</NavLink>
+                <NavLink href="brugere" class="more-link">Brugere</NavLink>
+            </AuthorizeView>
+            <AuthorizeView>
+                <Authorized>
+                    <div class="more-user">
+                        <div class="user-name">@(context.User.FindFirst(AppClaims.Navn)?.Value ?? context.User.Identity?.Name)</div>
+                        <div class="user-sub">@Rolletekst(context.User)</div>
+                    </div>
+                    <form method="post" action="/logout">
+                        <AntiforgeryToken />
+                        <button type="submit" class="btn btn-secondary btn-block">Log ud</button>
+                    </form>
+                </Authorized>
+            </AuthorizeView>
+        </div>
+    </details>
+</nav>
+
+
 @code {
     private static string Rolletekst(ClaimsPrincipal bruger) =>
         bruger.IsInRole(Roller.PlatformAdmin) ? "Platformsadministrator"

@@ -14,7 +14,8 @@
     <button type="button" class="btn btn-secondary btn-inline" @onclick="OpdaterAsync" disabled="@_arbejder">Opdatér</button>
 </div>
 
-<div class="card card-flat">
+<details class="card card-flat filter-details">
+    <summary>Filtre@(FilterTekst())</summary>
     <div class="form-grid">
         <div class="field">
             <label for="logudfald">Udfald</label>
@@ -48,7 +49,7 @@
     <div class="actions">
         <button type="button" class="btn btn-primary btn-inline" @onclick="SoegAsync" disabled="@_arbejder">Vis</button>
     </div>
-</div>
+</details>
 
 @if (_data is null)
 {
@@ -88,16 +89,18 @@ else
                             <td>@r.OrganisationNavn</td>
                         }
                         <td>@r.Afsender</td>
-                        <td>@r.Tekst</td>
+                        <td class="sms-tekst">@r.Tekst</td>
                         <td>@(r.RessourceNavn is null ? "–" : $"{r.LokationNavn} – {r.RessourceNavn}")</td>
                         <td>
+                          <div class="udfald-celle">
                             <span class="badge @(r.Udfald == Udfald.Aabnet ? "badge-ok" : r.Udfald == Udfald.TTLockFejl ? "badge-off" : "badge-wait")">
                                 @OplaasningsLogService.UdfaldTekst(r.Udfald)
                             </span>
                             @if (r.Fejltekst is not null)
                             {
-                                <div class="muted">@r.Fejltekst@(r.TTLockErrcode is { } k ? $" (kode {k})" : "")</div>
+                                <div class="muted fejltekst">@r.Fejltekst@(r.TTLockErrcode is { } k ? $" (kode {k})" : "")</div>
                             }
+                          </div>
                         </td>
                     </tr>
                 }
@@ -119,6 +122,12 @@ else
     private IReadOnlyList<SmsNummerOversigt> _numre = [];
     private LogSide? _data;
     private bool _arbejder;
+
+    private string FilterTekst()
+    {
+        var n = (string.IsNullOrEmpty(_udfald) ? 0 : 1) + (string.IsNullOrEmpty(_nummer) ? 0 : 1) + (_fra is null ? 0 : 1) + (_til is null ? 0 : 1);
+        return n == 0 ? "" : $" ({n})";
+    }
 
     private string _udfald = string.Empty;
     private string _nummer = string.Empty;

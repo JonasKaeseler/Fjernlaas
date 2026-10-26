@@ -12,7 +12,7 @@
         <h1 class="page-title">SMS-numre og nøgleord</h1>
         <p class="muted">Hvert SMS-nummer har sin egen hemmelige webhook-adresse. Et nøgleord på nummeret åbner en bestemt ressource.</p>
     </div>
-    <button type="button" class="btn btn-primary btn-inline" @onclick="VisOpretNummer">+ Tilføj SMS-nummer</button>
+    <button type="button" class="btn btn-primary btn-inline" aria-label="Tilføj SMS-nummer" @onclick="VisOpretNummer">+ Tilføj</button>
 </div>
 
 @if (_besked is not null)
@@ -132,7 +132,7 @@ else
             <h2 class="page-title">Nøgleord</h2>
             <p class="muted">Første ord i SMS'en, uden forskel på store og små bogstaver.</p>
         </div>
-        <button type="button" class="btn btn-primary btn-inline" @onclick="VisOpretOrd">+ Tilføj nøgleord</button>
+        <button type="button" class="btn btn-primary btn-inline" aria-label="Tilføj nøgleord" @onclick="VisOpretOrd">+ Tilføj</button>
     </div>
 
     @if (_viserOrdForm)
