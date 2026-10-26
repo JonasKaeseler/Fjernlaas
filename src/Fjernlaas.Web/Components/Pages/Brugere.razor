@@ -18,7 +18,7 @@
     </div>
     @if (_aktoer?.ErPlatformAdmin == true)
     {
-        <button type="button" class="btn btn-primary btn-inline" aria-label="Tilføj bruger" @onclick="VisOpret">+ Tilføj</button>
+        <button type="button" class="btn btn-primary btn-inline" @onclick="VisOpret"><span aria-hidden="true">+ Tilføj</span><span class="sr-only">Tilføj bruger</span></button>
     }
 </div>
 

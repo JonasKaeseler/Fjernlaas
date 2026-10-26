@@ -11,7 +11,7 @@
         <h1 class="page-title">Organisationer</h1>
         <p class="muted">Opret og vedligehold de organisationer, der bruger platformen.</p>
     </div>
-    <button type="button" class="btn btn-primary btn-inline" aria-label="Tilføj organisation" @onclick="VisOpret">+ Tilføj</button>
+    <button type="button" class="btn btn-primary btn-inline" @onclick="VisOpret"><span aria-hidden="true">+ Tilføj</span><span class="sr-only">Tilføj organisation</span></button>
 </div>
 
 @if (_besked is not null)

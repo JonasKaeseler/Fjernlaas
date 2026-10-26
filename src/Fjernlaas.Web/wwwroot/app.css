@@ -355,3 +355,5 @@ h1[tabindex="-1"]:focus { outline: none; }
     .table td > .udfald-celle { flex: 1 1 0; align-items: flex-end; text-align: right; }
     .udfald-celle .badge { text-align: right; }
 }
+
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

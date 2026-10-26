@@ -30,7 +30,7 @@ else
                 · <span class="badge @(_lokation.Status == LokationStatus.Aktiv ? "badge-ok" : "badge-off")">@(_lokation.Status == LokationStatus.Aktiv ? "Aktiv" : "Deaktiveret")</span>
             </p>
         </div>
-        <button type="button" class="btn btn-primary btn-inline" aria-label="Tilføj ressource" @onclick="VisOpret">+ Tilføj</button>
+        <button type="button" class="btn btn-primary btn-inline" @onclick="VisOpret"><span aria-hidden="true">+ Tilføj</span><span class="sr-only">Tilføj ressource</span></button>
     </div>
 
     @if (_lokation.Status != LokationStatus.Aktiv)
